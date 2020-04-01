@@ -1,2 +1,3 @@
 rootProject.name='CarNavAR'
 include ':app', ':arcore-location'
+include ':opencv-library411'

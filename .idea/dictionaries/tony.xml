@@ -12,6 +12,7 @@
       <w>mylocation</w>
       <w>nanosec</w>
       <w>navmap</w>
+      <w>opencv</w>
       <w>renderable</w>
       <w>renderables</w>
       <w>slerp</w>

@@ -9,4 +9,8 @@ public class AppConfigs {
             Manifest.permission.INTERNET,
             Manifest.permission.CAMERA
     };
+
+    public static void initStaticLibs() {
+
+    }
 }
