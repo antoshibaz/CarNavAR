@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:layout_gravity="bottom">
+
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fab_place_chosen"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:scaleX="0"
+        android:scaleY="0"
+        app:tint="@color/mapbox_plugins_white"
+        app:backgroundTint="@color/mapbox_plugins_green"
+        app:elevation="3dp"
+        app:layout_anchor="@id/root_bottom_sheet"
+        app:layout_anchorGravity="top|end"
+        app:srcCompat="@drawable/mapbox_ic_check" />
+
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fab_arnav"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="88dp"
+        android:scaleX="0"
+        android:scaleY="0"
+        app:tint="@color/mapbox_plugins_white"
+        app:backgroundTint="@color/mapbox_plugins_bright_blue"
+        app:elevation="3dp"
+        app:layout_anchor="@id/fab_place_chosen"
+        app:layout_anchorGravity="center|end"
+        app:srcCompat="@drawable/mapbox_ic_check"  />
+
+    <LinearLayout
+        android:id="@+id/root_bottom_sheet"
+        android:layout_width="match_parent"
+        android:layout_height="240dp"
+        android:orientation="vertical"
+        app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior">
+
+        <View
+            android:id="@+id/shadow"
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:layout_gravity="top"
+            android:background="@drawable/mapbox_gradient_shadow_up"
+            app:layout_anchor="@+id/root_bottom_sheet"
+            app:layout_anchorGravity="top" />
+
+        <include layout="@layout/navmap_bottom_sheet_header" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@color/mapbox_plugins_material_grey_200">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="Selector" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

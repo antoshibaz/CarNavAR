@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">CarNavAR</string>
+
+    <!-- mapbox string properties -->
+    <string name="mapbox_access_token" translatable="false">sk.eyJ1IjoiYW50b255LWRldiIsImEiOiJjazI4c2pwcWgyY296M2NucmNqZ21ieHQwIn0.uf2ZyJGxuEYUqzDBb95-5g</string>
+    <string name="mapbox_map_style_streets" translatable="false">mapbox://styles/mapbox/streets-v11</string>
+    <string name="mapbox_map_style_nav_light" translatable="false">mapbox://styles/mapbox/navigation-guidance-day-v4</string>
+    <string name="mapbox_map_style_nav_dark" translatable="false">mapbox://styles/mapbox/navigation-guidance-night-v4</string>
+    <string name="mapbox_custom_map_style" translatable="false">mapbox://</string>
+
+</resources>

@@ -1,0 +1,77 @@
+apply plugin: 'com.android.application'
+
+android {
+    compileSdkVersion 28
+    buildToolsVersion "29.0.2"
+
+    defaultConfig {
+        applicationId "com.app.carnavar"
+        minSdkVersion 24
+        targetSdkVersion 28
+        versionCode 1
+        versionName "1.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility = 1.8
+        targetCompatibility = 1.8
+    }
+    allprojects {
+        repositories {
+            flatDir {
+                dirs 'libs'
+            }
+            jcenter()
+            google()
+            mavenCentral()
+            maven { url 'https://mapbox.bintray.com/mapbox' }
+            maven { url 'https://jitpack.io' }
+        }
+    }
+}
+dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+
+    implementation 'androidx.appcompat:appcompat:1.1.0'
+    implementation 'androidx.constraintlayout:constraintlayout:1.1.3'
+
+    testImplementation 'junit:junit:4.13'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.1'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'
+
+    // mapbox sdk
+    //implementation 'com.mapbox.mapboxsdk:mapbox-android-navigation:0.42.1'
+    //implementation 'com.mapbox.mapboxsdk:mapbox-android-sdk:8.4.0'
+    //implementation 'com.mapbox.mapboxsdk:mapbox-android-core:1.3.0'
+    //implementation 'com.mapbox.mapboxsdk:mapbox-android-plugin-annotation-v9:0.8.0'
+    implementation 'com.mapbox.mapboxsdk:mapbox-android-navigation-ui:0.42.5'
+    implementation 'com.mapbox.mapboxsdk:mapbox-android-plugin-building-v9:0.7.0'
+    implementation 'com.mapbox.mapboxsdk:mapbox-android-plugin-places-v9:0.10.0'
+
+    // custom ui
+    implementation 'com.lapism:search:1.0.0'
+    implementation 'androidx.cardview:cardview'
+    implementation 'com.google.android:flexbox:2.0.1'
+    implementation 'com.google.android.material:material'
+
+    // google gps location service
+    implementation 'com.google.android.gms:play-services-location:17.0.0'
+
+    // ar
+    implementation 'com.google.ar:core:1.16.0'
+    implementation "com.google.ar.sceneform:core:1.15.0"
+    implementation "com.google.ar.sceneform.ux:sceneform-ux:1.15.0"
+    implementation project(path: ':arcore-location')
+    //implementation 'com.github.appoly:ARCore-Location:1.2'
+
+    //implementation project(path: ':madlocationmanager')
+    //implementation 'com.github.maddevsio:mad-location-manager:0.1.13'
+}

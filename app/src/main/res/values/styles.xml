@@ -1,0 +1,12 @@
+<resources>
+
+    <style name="AppTheme" parent="NavigationViewDark">
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorAccent">@color/colorAccent</item>
+
+        <!--    for fab icon color    -->
+        <!--  <item name="colorOnSecondary">@color/mapbox_plugins_white</item>  -->
+    </style>
+
+</resources>

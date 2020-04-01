@@ -1,0 +1,49 @@
+-- Merging decision tree log ---
+manifest
+ADDED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml:1:1-9:12
+INJECTED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml:1:1-9:12
+INJECTED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml:1:1-9:12
+INJECTED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml:1:1-9:12
+INJECTED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml:1:1-9:12
+INJECTED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml:1:1-9:12
+INJECTED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml:1:1-9:12
+	package
+		ADDED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml:2:5-35
+		INJECTED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml
+		INJECTED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml
+	android:versionName
+		INJECTED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml
+		ADDED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml:1:1-9:12
+		INJECTED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml
+	android:versionCode
+		INJECTED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml
+		ADDED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml:1:1-9:12
+		INJECTED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml
+	xmlns:android
+		ADDED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml:1:11-69
+uses-permission#android.permission.CAMERA
+ADDED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml:5:5-65
+	android:name
+		ADDED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml:5:22-62
+uses-permission#android.permission.ACCESS_COARSE_LOCATION
+ADDED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml:6:5-81
+	android:name
+		ADDED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml:6:22-78
+uses-permission#android.permission.ACCESS_FINE_LOCATION
+ADDED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml:7:5-79
+	android:name
+		ADDED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml:7:22-76
+uses-sdk
+INJECTED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml reason: use-sdk injection requested
+INJECTED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml
+INJECTED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml
+INJECTED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml
+INJECTED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml
+	android:targetSdkVersion
+		INJECTED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml
+		ADDED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml
+		INJECTED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml
+	android:minSdkVersion
+		INJECTED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml
+		ADDED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml
+		INJECTED from /media/datadisk/Study/android/CarNavAR/arcore-location/src/main/AndroidManifest.xml
