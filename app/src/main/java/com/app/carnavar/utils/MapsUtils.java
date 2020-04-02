@@ -396,6 +396,6 @@ public class MapsUtils {
                 " Acc=" + location.getAccuracy() + " AltAcc=" + location.getVerticalAccuracyMeters() +
                 " Bear=" + location.getBearing() + " BearAcc=" + location.getBearingAccuracyDegrees() +
                 " Speed=" + location.getSpeed() + " SpeedAcc=" + location.getSpeedAccuracyMetersPerSecond() +
-                " SystemFixTime=" + location.getElapsedRealtimeNanos() + " FixTime=" + location.getTime();
+                " SystemFixTime=" + location.getElapsedRealtimeNanos() + " FixTimestamp=" + location.getTime();
     }
 }

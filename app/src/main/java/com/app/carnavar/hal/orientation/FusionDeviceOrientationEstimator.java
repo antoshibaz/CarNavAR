@@ -9,6 +9,7 @@ import android.view.WindowManager;
 
 import com.app.carnavar.hal.sensors.Gyroscope;
 import com.app.carnavar.hal.sensors.RotationVector;
+import com.app.carnavar.hal.sensors.SensorTypes;
 import com.app.carnavar.hal.sensors.VirtualSensor;
 import com.app.carnavar.utils.math.MatrixF4x4;
 import com.app.carnavar.utils.math.Quaternion;
@@ -19,7 +20,6 @@ import java.util.Locale;
 public class FusionDeviceOrientationEstimator extends VirtualSensor implements VirtualSensor.SensorListener {
 
     public static final String TAG = FusionDeviceOrientationEstimator.class.getSimpleName();
-    public static final int SENSOR_UID = 102;
 
     private RotationVector rotationVector;
     private Gyroscope gyroscope;
@@ -34,9 +34,9 @@ public class FusionDeviceOrientationEstimator extends VirtualSensor implements V
         sensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
         windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
         rotationVector = new RotationVector(context);
-        rotationVector.addSensorDataCaptureListener(this);
+        rotationVector.addSensorValuesCaptureListener(this);
         gyroscope = new Gyroscope(context);
-        gyroscope.addSensorDataCaptureListener(this);
+        gyroscope.addSensorValuesCaptureListener(this);
     }
 
     public FusionDeviceOrientationEstimator(Context context, Handler handler) {
@@ -44,9 +44,9 @@ public class FusionDeviceOrientationEstimator extends VirtualSensor implements V
         sensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
         windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
         rotationVector = new RotationVector(context, handler);
-        rotationVector.addSensorDataCaptureListener(this);
+        rotationVector.addSensorValuesCaptureListener(this);
         gyroscope = new Gyroscope(context, handler);
-        gyroscope.addSensorDataCaptureListener(this);
+        gyroscope.addSensorValuesCaptureListener(this);
     }
 
     /**
@@ -204,7 +204,7 @@ public class FusionDeviceOrientationEstimator extends VirtualSensor implements V
 
     @Override
     public void onSensorValuesCaptured(float[] values, int sensorType, long timeNanos) {
-        if (sensorType == RotationVector.SENSOR_UID) {
+        if (sensorType == SensorTypes.ORIENTATION_ROTATION_VECTOR) {
             // Process rotation vector (just safe it)
             // Calculate angle. Starting with API_18, Android will provide this value as event.values[3], but if not, we have to calculate it manually.
             SensorManager.getQuaternionFromVector(temporaryQuaternion, values);
@@ -216,7 +216,7 @@ public class FusionDeviceOrientationEstimator extends VirtualSensor implements V
                 positionInitialised = true;
             }
 
-        } else if (sensorType == Gyroscope.SENSOR_UID) {
+        } else if (sensorType == SensorTypes.GYROSCOPE_ANGLE_VELOCITY) {
             // Process Gyroscope and perform fusion
 
             // This timestep's delta rotation to be multiplied by the current rotation
@@ -343,7 +343,7 @@ public class FusionDeviceOrientationEstimator extends VirtualSensor implements V
             orientationAngles[2] = (float) Math.toDegrees(angles[2]);
             orientationAngles[0] = ((float) Math.toDegrees(angles[0]) + 360f) % 360f; // scale to 0-360 deg
 
-            notifyAllSensorDataCaptureListeners(orientationAngles, SENSOR_UID, timeNanos);
+            notifyAllSensorValuesCaptureListeners(orientationAngles, SensorTypes.ORIENTATION_ROTATION_ANGLES, timeNanos);
         }
     }
 

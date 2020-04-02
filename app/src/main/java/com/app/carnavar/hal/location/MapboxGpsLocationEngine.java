@@ -38,7 +38,7 @@ public class MapboxGpsLocationEngine extends GpsLocationEngine implements Locati
     public void onSuccess(LocationEngineResult result) {
         if (result != null) {
             lastLocation = result.getLastLocation();
-            notifyAllLocationUpdateListeners(lastLocation);
+            notifyAllGpsLocationUpdateListeners(lastLocation);
         }
     }
 
@@ -50,7 +50,7 @@ public class MapboxGpsLocationEngine extends GpsLocationEngine implements Locati
     @Override
     public void start() {
         stop();
-        LocationEngineRequest locationEngineRequest = new LocationEngineRequest.Builder(100L).setFastestInterval(100L).build();
+        LocationEngineRequest locationEngineRequest = new LocationEngineRequest.Builder(1L).setFastestInterval(1L).build();
         if (handler != null) {
             mapboxLocationEngine.requestLocationUpdates(locationEngineRequest, this, handler.getLooper());
         } else {

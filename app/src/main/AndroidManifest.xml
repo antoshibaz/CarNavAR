@@ -58,7 +58,7 @@
             android:stopWithTask="false" />
 
         <service
-            android:name=".services.GpsImuService"
+            android:name=".services.gpsimu.GpsImuService"
             android:enabled="true"
             android:exported="false" />
 

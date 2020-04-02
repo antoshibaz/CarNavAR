@@ -16,7 +16,6 @@ import java.util.Locale;
 public class LinearAccelerometer extends VirtualSensor implements SensorEventListener, VirtualSensor.SensorListener {
 
     public static final String TAG = LinearAccelerometer.class.getSimpleName();
-    public static final int SENSOR_UID = 4;
 
     public static final Integer ALL_ACCELERATION = Sensor.TYPE_ACCELEROMETER; // linear acceleration+gravity
 
@@ -36,6 +35,7 @@ public class LinearAccelerometer extends VirtualSensor implements SensorEventLis
     private float[] gravity2 = new float[]{0, 0, 0};
     private float[] linAcc2 = new float[]{0, 0, 0};
 
+    private Sensor sensor;
     private SensorManager sensorManager;
     private WindowManager windowManager;
 
@@ -52,17 +52,16 @@ public class LinearAccelerometer extends VirtualSensor implements SensorEventLis
     private void init(Context context) {
         sensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
         windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
-        sensorType = ALL_ACCELERATION;
         rawValues = new float[3];
-        sensor = sensorManager.getDefaultSensor(sensorType);
+        sensor = sensorManager.getDefaultSensor(ALL_ACCELERATION);
         deviceOrientationEstimator = new FusionDeviceOrientationEstimator(context, handler);
-        deviceOrientationEstimator.addSensorDataCaptureListener(this);
+        deviceOrientationEstimator.addSensorValuesCaptureListener(this);
     }
 
     // Ax, Ay, Az accelerations in m/s^2
     @Override
     public void onSensorChanged(SensorEvent event) {
-        if (event.sensor.getType() == sensorType) {
+        if (event.sensor.getType() == ALL_ACCELERATION) {
             System.arraycopy(event.values, 0, rawValues, 0, rawValues.length);
 
             // approach 1 based on low-pass filtering
@@ -112,7 +111,7 @@ public class LinearAccelerometer extends VirtualSensor implements SensorEventLis
                 linAcc2[1] = (rawValues[1] - gravity2[1]) / SensorManager.GRAVITY_EARTH;
                 linAcc2[2] = (rawValues[2] - gravity2[2]) / SensorManager.GRAVITY_EARTH;
 
-                notifyAllSensorDataCaptureListeners(linAcc2, SENSOR_UID, TimeUtils.currentAndroidSystemTimeNanos());
+                notifyAllSensorValuesCaptureListeners(linAcc2, SensorTypes.LINEAR_ACCELERATION, TimeUtils.currentAndroidSystemTimeNanos());
             }
         }
     }
@@ -124,7 +123,7 @@ public class LinearAccelerometer extends VirtualSensor implements SensorEventLis
     @Override
     public void onSensorValuesCaptured(float[] values, int sensorType, long timeNanos) {
         switch (sensorType) {
-            case FusionDeviceOrientationEstimator.SENSOR_UID: {
+            case SensorTypes.ORIENTATION_ROTATION_ANGLES: {
                 System.arraycopy(values, 0, orientationAngles, 0, values.length);
             }
         }
@@ -140,9 +139,9 @@ public class LinearAccelerometer extends VirtualSensor implements SensorEventLis
         stop();
         deviceOrientationEstimator.stop();
         if (handler != null) {
-            sensorManager.registerListener(this, sensor, sampleRateTimeMicros, handler);
+            sensorManager.registerListener(this, sensor, sampleRatePeriodTimeMicros, handler);
         } else {
-            sensorManager.registerListener(this, sensor, sampleRateTimeMicros);
+            sensorManager.registerListener(this, sensor, sampleRatePeriodTimeMicros);
         }
         deviceOrientationEstimator.start();
     }

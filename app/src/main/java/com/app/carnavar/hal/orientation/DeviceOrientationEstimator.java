@@ -9,6 +9,7 @@ import android.view.WindowManager;
 import com.app.carnavar.hal.sensors.Accelerometer;
 import com.app.carnavar.hal.sensors.Magnetometer;
 import com.app.carnavar.hal.sensors.RotationVector;
+import com.app.carnavar.hal.sensors.SensorTypes;
 import com.app.carnavar.hal.sensors.VirtualSensor;
 
 import java.util.Locale;
@@ -17,7 +18,6 @@ import java.util.Locale;
 public class DeviceOrientationEstimator extends VirtualSensor implements VirtualSensor.SensorListener {
 
     public static final String TAG = DeviceOrientationEstimator.class.getSimpleName();
-    public static final int SENSOR_UID = 101;
 
     private Accelerometer accelerometer;
     private Magnetometer magnetometer;
@@ -37,12 +37,12 @@ public class DeviceOrientationEstimator extends VirtualSensor implements Virtual
 
         if (useRotVec) {
             rotationVector = new RotationVector(context);
-            rotationVector.addSensorDataCaptureListener(this);
+            rotationVector.addSensorValuesCaptureListener(this);
         } else {
             accelerometer = new Accelerometer(context);
             magnetometer = new Magnetometer(context);
-            accelerometer.addSensorDataCaptureListener(this);
-            magnetometer.addSensorDataCaptureListener(this);
+            accelerometer.addSensorValuesCaptureListener(this);
+            magnetometer.addSensorValuesCaptureListener(this);
         }
     }
 
@@ -54,12 +54,12 @@ public class DeviceOrientationEstimator extends VirtualSensor implements Virtual
 
         if (useRotVec) {
             rotationVector = new RotationVector(context, handler);
-            rotationVector.addSensorDataCaptureListener(this);
+            rotationVector.addSensorValuesCaptureListener(this);
         } else {
             accelerometer = new Accelerometer(context, handler);
             magnetometer = new Magnetometer(context, handler);
-            accelerometer.addSensorDataCaptureListener(this);
-            magnetometer.addSensorDataCaptureListener(this);
+            accelerometer.addSensorValuesCaptureListener(this);
+            magnetometer.addSensorValuesCaptureListener(this);
         }
     }
 
@@ -142,7 +142,7 @@ public class DeviceOrientationEstimator extends VirtualSensor implements Virtual
         orientationAngles[2] = (float) Math.toDegrees(angles[2]);
         orientationAngles[0] = ((float) Math.toDegrees(angles[0]) + 360f) % 360f; // scale to 0-360 deg
 
-        notifyAllSensorDataCaptureListeners(getOrientationAngles(), SENSOR_UID, timeNanos);
+        notifyAllSensorValuesCaptureListeners(getOrientationAngles(), SensorTypes.ORIENTATION_ROTATION_ANGLES, timeNanos);
     }
 
     public static String toString(float[] values) {

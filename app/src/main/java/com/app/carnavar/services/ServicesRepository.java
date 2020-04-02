@@ -15,7 +15,7 @@ public class ServicesRepository {
     private static final ServicesRepository servicesRepository = new ServicesRepository();
 
     private static HashMap<Class<? extends Service>, ? super Service> serviceRepositoryRegistry = new HashMap<>();
-    private ServiceConnection connectionService = null;
+    private static HashMap<Class<? extends Service>, ServiceConnection> serviceConnectionCallbacksRegistry = new HashMap<>();
 
     private ServicesRepository() {
     }
@@ -24,38 +24,72 @@ public class ServicesRepository {
         return servicesRepository;
     }
 
+    public interface ServiceStartedCallback {
+        void onServiceStarted();
+    }
+
     public interface RepositoryQueryCallback<T extends Service> {
-        void onCall(T value);
+        void onCall(T serviceInstance);
     }
 
     public synchronized <T1 extends Service,
             T2 extends Binder & ServiceBinder> void startService(Context context,
                                                                  Class<T1> serviceCls) {
-        if (connectionService == null) {
-            connectionService = new ServiceConnection() {
-                @Override
-                public void onServiceConnected(ComponentName name, IBinder service) {
-                    T1 retrievedService = (T1) ((T2) service).getService();
-                    serviceRepositoryRegistry.put(serviceCls, retrievedService);
-                }
 
-                @Override
-                public void onServiceDisconnected(ComponentName name) {
-                }
-            };
-        }
+        ServiceConnection serviceConnection = new ServiceConnection() {
+            @Override
+            public void onServiceConnected(ComponentName name, IBinder service) {
+                T1 retrievedService = (T1) ((T2) service).getService();
+                serviceRepositoryRegistry.put(serviceCls, retrievedService);
+                serviceConnectionCallbacksRegistry.put(serviceCls, this);
+            }
 
-        if (!serviceRepositoryRegistry.containsKey(serviceCls)) {
+            @Override
+            public void onServiceDisconnected(ComponentName name) {
+            }
+        };
+
+
+        if (!serviceRepositoryRegistry.containsKey(serviceCls) && !serviceConnectionCallbacksRegistry.containsKey(serviceCls)) {
             Intent serviceIntent = new Intent(context.getApplicationContext(), serviceCls);
-            context.getApplicationContext().bindService(serviceIntent, connectionService, Context.BIND_AUTO_CREATE);
+            context.getApplicationContext().bindService(serviceIntent, serviceConnection, Context.BIND_AUTO_CREATE);
+        }
+    }
+
+    public synchronized <T1 extends Service,
+            T2 extends Binder & ServiceBinder> void startService(Context context,
+                                                                 Class<T1> serviceCls,
+                                                                 ServiceStartedCallback serviceStartedCallback) {
+
+        ServiceConnection serviceConnection = new ServiceConnection() {
+            @Override
+            public void onServiceConnected(ComponentName name, IBinder service) {
+                T1 retrievedService = (T1) ((T2) service).getService();
+                serviceRepositoryRegistry.put(serviceCls, retrievedService);
+                serviceConnectionCallbacksRegistry.put(serviceCls, this);
+                serviceStartedCallback.onServiceStarted();
+            }
+
+            @Override
+            public void onServiceDisconnected(ComponentName name) {
+            }
+        };
+
+
+        if (!serviceRepositoryRegistry.containsKey(serviceCls) && !serviceConnectionCallbacksRegistry.containsKey(serviceCls)) {
+            Intent serviceIntent = new Intent(context.getApplicationContext(), serviceCls);
+            context.getApplicationContext().bindService(serviceIntent, serviceConnection, Context.BIND_AUTO_CREATE);
         }
     }
 
     public synchronized <T extends Service> void stopService(Context context, Class<T> serviceCls) {
-        if (serviceRepositoryRegistry.containsKey(serviceCls)) {
-            T service = (T) serviceRepositoryRegistry.remove(serviceCls);
-            if (service != null) {
-                context.getApplicationContext().unbindService(connectionService);
+        if (serviceRepositoryRegistry.containsKey(serviceCls) && serviceConnectionCallbacksRegistry.containsKey(serviceCls)) {
+            T service = (T) serviceRepositoryRegistry.get(serviceCls);
+            ServiceConnection serviceConnection = serviceConnectionCallbacksRegistry.get(serviceCls);
+            if (service != null && serviceConnection != null) {
+                context.getApplicationContext().unbindService(serviceConnection);
+                serviceRepositoryRegistry.remove(serviceCls);
+                serviceConnectionCallbacksRegistry.remove(serviceCls);
             }
         }
     }

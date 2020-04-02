@@ -13,13 +13,13 @@ import java.util.Locale;
 public class RotationVector extends VirtualSensor implements SensorEventListener {
 
     public static final String TAG = RotationVector.class.getSimpleName();
-    public static final int SENSOR_UID = 3;
 
     // rotation vector presents rotation components of rotation matrix
     // ANDROID_ROTATION_VECTOR uses data fusion from accelerometer and magnetometer
     // + smoothing data with maybe kalman filter and other tricks
     private static final Integer ANDROID_ROTATION_VECTOR = Sensor.TYPE_ROTATION_VECTOR;
 
+    private Sensor sensor;
     private SensorManager sensorManager;
 
     public RotationVector(Context context) {
@@ -34,16 +34,15 @@ public class RotationVector extends VirtualSensor implements SensorEventListener
 
     private void init(Context context) {
         sensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
-        sensorType = ANDROID_ROTATION_VECTOR;
         rawValues = new float[4];
-        sensor = sensorManager.getDefaultSensor(sensorType);
+        sensor = sensorManager.getDefaultSensor(ANDROID_ROTATION_VECTOR);
     }
 
     @Override
     public void onSensorChanged(SensorEvent event) {
-        if (event.sensor.getType() == sensorType) {
+        if (event.sensor.getType() == ANDROID_ROTATION_VECTOR) {
             System.arraycopy(event.values, 0, rawValues, 0, rawValues.length);
-            notifyAllSensorDataCaptureListeners(getRawValues(), SENSOR_UID, event.timestamp);
+            notifyAllSensorValuesCaptureListeners(getRawValues(), SensorTypes.ORIENTATION_ROTATION_VECTOR, event.timestamp);
         }
     }
 
@@ -60,9 +59,9 @@ public class RotationVector extends VirtualSensor implements SensorEventListener
     public void start() {
         stop();
         if (handler != null) {
-            sensorManager.registerListener(this, sensor, sampleRateTimeMicros, handler);
+            sensorManager.registerListener(this, sensor, sampleRatePeriodTimeMicros, handler);
         } else {
-            sensorManager.registerListener(this, sensor, sampleRateTimeMicros);
+            sensorManager.registerListener(this, sensor, sampleRatePeriodTimeMicros);
         }
     }
 

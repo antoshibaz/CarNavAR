@@ -1,16 +1,9 @@
 package com.app.carnavar.maps;
 
-import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.graphics.Color;
-import android.location.Criteria;
-import android.location.Location;
-import android.location.LocationListener;
-import android.location.LocationManager;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -18,7 +11,6 @@ import android.widget.Toast;
 
 import com.app.carnavar.ArActivity;
 import com.app.carnavar.R;
-import com.app.carnavar.hal.orientation.DeviceOrientationEstimator;
 import com.app.carnavar.ui.NavMapBottomSheet;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
@@ -34,10 +26,7 @@ import java.util.Locale;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.core.app.ActivityCompat;
 import androidx.fragment.app.Fragment;
-
-import static android.content.Context.LOCATION_SERVICE;
 
 public class NavMapFragment extends Fragment {
 
@@ -52,8 +41,6 @@ public class NavMapFragment extends Fragment {
     private FloatingActionButton placeSelectedBtn;
     private FloatingActionButton locationsSearchFab;
     private FloatingActionButton fabArNav;
-
-    private DeviceOrientationEstimator deviceOrientationEstimator;
 
     public NavMapFragment() {
     }
@@ -125,38 +112,21 @@ public class NavMapFragment extends Fragment {
         });
 
         placeSelectedBtn = view.findViewById(R.id.fab_place_chosen);
-        placeSelectedBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-            }
+        placeSelectedBtn.setOnClickListener(view12 -> {
         });
 
         fabArNav = view.findViewById(R.id.fab_arnav);
-        fabArNav.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                Point dstPoint = navMap.getCurrentDestinationPoint();
-                if (dstPoint != null) {
-                    Intent intent = new Intent(getActivity(), ArActivity.class);
-                    intent.putExtra("destination_marker", new double[]{dstPoint.longitude(),
-                            dstPoint.latitude()});
-                    startActivity(intent);
-                } else {
-                    Toast.makeText(getContext(), "Poi place is not selected", Toast.LENGTH_LONG).show();
-                }
+        fabArNav.setOnClickListener(view1 -> {
+            Point dstPoint = navMap.getCurrentDestinationPoint();
+            if (dstPoint != null) {
+                Intent intent = new Intent(getActivity(), ArActivity.class);
+                intent.putExtra("destination_marker", new double[]{dstPoint.longitude(),
+                        dstPoint.latitude()});
+                startActivity(intent);
+            } else {
+                Toast.makeText(getContext(), "Poi place is not selected", Toast.LENGTH_LONG).show();
             }
         });
-
-//        deviceOrientationEstimator = new DeviceOrientationEstimator((SensorManager) getActivity().getSystemService(Context.SENSOR_SERVICE),
-//                getActivity().getWindowManager(), true);
-//        deviceOrientationEstimator.setSensorDataCaptureListener(new VirtualSensor.SensorDataCaptureListener() {
-//            @Override
-//            public void onDataCaptured(float[] values, int sensorType) {
-//                if (sensorType == DeviceOrientationEstimator.SENSOR_UID) {
-//                    navMap.updateOrientation(values[0]);
-//                }
-//            }
-//        });
     }
 
     public void showSelectedPlaceDetails(CarmenFeature carmenFeature) {
@@ -202,14 +172,12 @@ public class NavMapFragment extends Fragment {
     public void onResume() {
         super.onResume();
         mapView.onResume();
-//        deviceOrientationEstimator.start();
     }
 
     @Override
     public void onPause() {
         super.onPause();
         mapView.onPause();
-//        deviceOrientationEstimator.stop();
     }
 
     @Override

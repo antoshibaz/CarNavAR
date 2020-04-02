@@ -16,8 +16,12 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.app.carnavar.hal.orientation.FusionDeviceOrientationEstimator;
+import com.app.carnavar.hal.sensors.SensorTypes;
 import com.app.carnavar.hal.sensors.VirtualSensor;
 import com.app.carnavar.maps.NavMap;
+import com.app.carnavar.services.ServicesRepository;
+import com.app.carnavar.services.gpsimu.GpsImuService;
+import com.app.carnavar.services.gpsimu.GpsImuServiceInterfaces;
 import com.google.android.material.snackbar.Snackbar;
 import com.google.ar.core.ArCoreApk;
 import com.google.ar.core.Config;
@@ -70,7 +74,12 @@ public class ArActivity extends AppCompatActivity {
     private MapView navMapView;
     private NavMap navMap;
 
-    private FusionDeviceOrientationEstimator deviceOrientationEstimator;
+    private GpsImuServiceInterfaces.ImuListener imuListener = (values, sensorType, timeNanos) -> {
+        if (sensorType == SensorTypes.ORIENTATION_ROTATION_ANGLES) {
+            Log.d(TAG, " bearing=" + String.valueOf(values[0]));
+            navMap.updateOrientation(values[0]);
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -89,16 +98,6 @@ public class ArActivity extends AppCompatActivity {
             @Override
             public void onSuccess() {
                 navMap.addMarker(Point.fromLngLat(dstPoiMarker[0], dstPoiMarker[1]));
-            }
-        });
-
-        deviceOrientationEstimator = new FusionDeviceOrientationEstimator(getApplicationContext());
-        deviceOrientationEstimator.addSensorDataCaptureListener(new VirtualSensor.SensorListener() {
-            @Override
-            public void onSensorValuesCaptured(float[] values, int sensorType, long timeNanos) {
-                if (sensorType == FusionDeviceOrientationEstimator.SENSOR_UID) {
-                    navMap.updateOrientation(values[0]);
-                }
             }
         });
 
@@ -339,6 +338,12 @@ public class ArActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
 
+        ServicesRepository.getInstance().startService(getApplicationContext(), GpsImuService.class, () -> {
+            ServicesRepository.getInstance().getService(GpsImuService.class, serviceInstance -> {
+                serviceInstance.registerImuListener(imuListener);
+            });
+        });
+
         if (locationScene != null) {
             locationScene.resume();
         }
@@ -372,7 +377,6 @@ public class ArActivity extends AppCompatActivity {
         }
 
         navMapView.onResume();
-        deviceOrientationEstimator.start();
     }
 
     /**
@@ -382,13 +386,17 @@ public class ArActivity extends AppCompatActivity {
     public void onPause() {
         super.onPause();
 
+        ServicesRepository.getInstance().getService(GpsImuService.class, serviceInstance -> {
+            serviceInstance.unregisterImuListener(imuListener);
+        });
+        ServicesRepository.getInstance().stopService(getApplicationContext(), GpsImuService.class);
+
         if (locationScene != null) {
             locationScene.pause();
         }
 
         arSceneView.pause();
         navMapView.onPause();
-        deviceOrientationEstimator.stop();
     }
 
     @Override

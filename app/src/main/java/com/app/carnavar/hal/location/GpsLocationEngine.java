@@ -3,39 +3,41 @@ package com.app.carnavar.hal.location;
 import android.location.Location;
 import android.os.Handler;
 
-import java.util.LinkedList;
+import java.util.ArrayList;
 import java.util.List;
 
 public abstract class GpsLocationEngine {
 
+    public static final String TAG = GpsLocationEngine.class.getSimpleName();
+
     protected Handler handler = null;
 
-    private List<LocationUpdateListener> locationListenerList = new LinkedList<>();
+    private List<GpsLocationUpdateListener> locationListenerList = new ArrayList<>();
     protected Location lastLocation;
 
-    public interface LocationUpdateListener {
-        void onLocationUpdated(Location location);
+    public interface GpsLocationUpdateListener {
+        void onGpsLocationUpdated(Location location);
     }
 
-    public synchronized void addLocationUpdateListener(LocationUpdateListener locationUpdateListener) {
-        if (locationUpdateListener != null && !locationListenerList.contains(locationUpdateListener)) {
-            locationListenerList.add(locationUpdateListener);
+    public synchronized void addGpsLocationUpdateListener(GpsLocationUpdateListener gpsLocationUpdateListener) {
+        if (gpsLocationUpdateListener != null && !locationListenerList.contains(gpsLocationUpdateListener)) {
+            locationListenerList.add(gpsLocationUpdateListener);
         }
     }
 
-    public synchronized void removeLocationUpdateListener(LocationUpdateListener locationUpdateListener) {
-        if (locationUpdateListener != null && locationListenerList.size() > 0) {
-            locationListenerList.remove(locationUpdateListener);
+    public synchronized void removeGpsLocationUpdateListener(GpsLocationUpdateListener gpsLocationUpdateListener) {
+        if (gpsLocationUpdateListener != null && locationListenerList.size() > 0) {
+            locationListenerList.remove(gpsLocationUpdateListener);
         }
     }
 
-    public synchronized void notifyAllLocationUpdateListeners(Location location) {
-        for (LocationUpdateListener locationListener : locationListenerList) {
-            locationListener.onLocationUpdated(location);
+    public synchronized void notifyAllGpsLocationUpdateListeners(Location location) {
+        for (GpsLocationUpdateListener locationListener : locationListenerList) {
+            locationListener.onGpsLocationUpdated(location);
         }
     }
 
-    public int getListenersCount() {
+    public int getGpsLocationListenersCount() {
         return locationListenerList.size();
     }
 

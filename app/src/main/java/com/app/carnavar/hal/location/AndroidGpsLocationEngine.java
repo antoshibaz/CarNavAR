@@ -32,7 +32,7 @@ public class AndroidGpsLocationEngine extends GpsLocationEngine implements Locat
     public void onLocationChanged(Location location) {
         if (location != null) {
             lastLocation = location;
-            notifyAllLocationUpdateListeners(lastLocation);
+            notifyAllGpsLocationUpdateListeners(lastLocation);
         }
     }
 

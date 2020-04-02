@@ -12,10 +12,10 @@ import java.util.Locale;
 public class Gyroscope extends VirtualSensor implements SensorEventListener {
 
     public static final String TAG = Gyroscope.class.getSimpleName();
-    public static final int SENSOR_UID = 2;
 
     private static final Integer GYRO = Sensor.TYPE_GYROSCOPE;
 
+    private Sensor sensor;
     private SensorManager sensorManager;
 
     public Gyroscope(Context context) {
@@ -30,17 +30,16 @@ public class Gyroscope extends VirtualSensor implements SensorEventListener {
 
     private void init(Context context) {
         sensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
-        sensorType = GYRO;
         rawValues = new float[3];
-        sensor = sensorManager.getDefaultSensor(sensorType);
+        sensor = sensorManager.getDefaultSensor(GYRO);
     }
 
     // Gx, Gy, Gz angle velocity in rad/s
     @Override
     public void onSensorChanged(SensorEvent event) {
-        if (event.sensor.getType() == sensorType) {
+        if (event.sensor.getType() == GYRO) {
             System.arraycopy(event.values, 0, rawValues, 0, rawValues.length);
-            notifyAllSensorDataCaptureListeners(getRawValues(), SENSOR_UID, event.timestamp);
+            notifyAllSensorValuesCaptureListeners(getRawValues(), SensorTypes.GYROSCOPE_ANGLE_VELOCITY, event.timestamp);
         }
     }
 
@@ -57,9 +56,9 @@ public class Gyroscope extends VirtualSensor implements SensorEventListener {
     public void start() {
         stop();
         if (handler != null) {
-            sensorManager.registerListener(this, sensor, sampleRateTimeMicros, handler);
+            sensorManager.registerListener(this, sensor, sampleRatePeriodTimeMicros, handler);
         } else {
-            sensorManager.registerListener(this, sensor, sampleRateTimeMicros);
+            sensorManager.registerListener(this, sensor, sampleRatePeriodTimeMicros);
         }
     }
 

@@ -6,6 +6,9 @@ import android.location.Location;
 import android.util.Log;
 import android.widget.Toast;
 
+import com.app.carnavar.services.ServicesRepository;
+import com.app.carnavar.services.gpsimu.GpsImuService;
+import com.app.carnavar.services.gpsimu.GpsImuServiceInterfaces;
 import com.app.carnavar.utils.android.ThemeManager;
 import com.mapbox.android.core.location.LocationEngine;
 import com.mapbox.android.core.location.LocationEngineCallback;
@@ -77,6 +80,8 @@ public class NavMap {
 
     private Point currentDestinationPoint;
 
+    private GpsImuServiceInterfaces.GpsLocationListener gpsLocationListener = this::updateLocation;
+
     private NavMapInitializedListener navMapInitializedListener;
 
     public interface NavMapInitializedListener {
@@ -99,7 +104,7 @@ public class NavMap {
                         .build());
 
                 initLocation(mapView, map);
-                initLocationEngine(mapView);
+//                initLocationEngine(mapView);
 
                 map.setPadding(0, (int) (map.getHeight() - map.getHeight() * 0.3), 0, 0);
                 initNavigation();
@@ -115,6 +120,10 @@ public class NavMap {
                 buildingPlugin.setVisibility(true);
                 buildingPlugin.setMinZoomLevel(10.0f);
                 buildingPlugin.setOpacity(0.4f);
+
+                ServicesRepository.getInstance().getService(GpsImuService.class, serviceInstance -> {
+                    serviceInstance.registerGpsLocationListener(gpsLocationListener);
+                });
 
                 if (navMapInitializedListener != null) {
                     navMapInitializedListener.onSuccess();
@@ -317,6 +326,11 @@ public class NavMap {
         if (locationEngine != null) {
             locationEngine.removeLocationUpdates(locationEngineCallback);
         }
+
+        ServicesRepository.getInstance().getService(GpsImuService.class, serviceInstance -> {
+            serviceInstance.unregisterGpsLocationListener(gpsLocationListener);
+        });
+
         if (navigation != null) {
             navigation.onDestroy();
         }
@@ -326,8 +340,8 @@ public class NavMap {
         @Override
         public void onSuccess(LocationEngineResult result) {
             if (result.getLastLocation() != null) {
-                updateLocation(result.getLastLocation());
-                Log.d("MapboxLocation: ", result.getLastLocation().toString());
+//                updateLocation(result.getLastLocation());
+                Log.d("MapboxLocation", result.getLastLocation().toString());
 //                Log.d("MapboxLocationThread", String.valueOf(android.os.Process.myTid()));
             }
         }

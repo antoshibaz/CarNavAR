@@ -6,7 +6,7 @@ import android.os.Bundle;
 import android.widget.Toast;
 
 import com.app.carnavar.maps.NavMapFragment;
-import com.app.carnavar.services.GpsImuService;
+import com.app.carnavar.services.gpsimu.GpsImuService;
 import com.app.carnavar.services.ServicesRepository;
 import com.app.carnavar.utils.android.PermissionsManager;
 import com.mapbox.api.geocoding.v5.models.CarmenFeature;
@@ -40,6 +40,12 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        ServicesRepository.getInstance().startService(getApplicationContext(), GpsImuService.class);
+    }
+
     private void startApp(Bundle savedInstanceState) {
         setContentView(R.layout.activity_main);
 
@@ -55,8 +61,6 @@ public class MainActivity extends AppCompatActivity {
                     .findFragmentByTag(NavMapFragment.TAG);
             //navMapFragment = NavMapFragment.getInstance();
         }
-
-        ServicesRepository.getInstance().startService(getApplicationContext(), GpsImuService.class);
     }
 
     @Override

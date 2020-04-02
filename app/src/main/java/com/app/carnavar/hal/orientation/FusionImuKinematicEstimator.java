@@ -10,6 +10,7 @@ import com.app.carnavar.hal.sensors.Accelerometer;
 import com.app.carnavar.hal.sensors.Gyroscope;
 import com.app.carnavar.hal.sensors.Magnetometer;
 import com.app.carnavar.hal.sensors.RotationVector;
+import com.app.carnavar.hal.sensors.SensorTypes;
 import com.app.carnavar.hal.sensors.VirtualSensor;
 import com.app.carnavar.utils.TimeUtils;
 import com.app.carnavar.utils.math.MatrixF4x4;
@@ -20,14 +21,10 @@ public class FusionImuKinematicEstimator extends VirtualSensor {
 
     public static final String TAG = FusionImuKinematicEstimator.class.getSimpleName();
 
-    public static final int TYPE_LINEAR_ACCELERATION = 50;
-    public static final int TYPE_ABS_LINEAR_ACCELERATIONS = 51;
-    public static final int TYPE_ORIENTATION_ANGLES = 52;
-
     // gyro fusion parameters
     private static final double GYRO_EPSILON = 0.05f;
     private static final float GYRO_OUTLIER_THRESHOLD = 0.75f;
-    private static final float GYRO_DIRECT_INTERPOLATION_WEIGHT = 0.1f;
+    private static final float GYRO_DIRECT_INTERPOLATION_WEIGHT = 0.5f;
 
     // sensors
     private Accelerometer accelerometer;
@@ -73,11 +70,11 @@ public class FusionImuKinematicEstimator extends VirtualSensor {
         sensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
         windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
         accelerometer = new Accelerometer(context);
-        accelerometer.addSensorDataCaptureListener(sensorsListener);
+        accelerometer.addSensorValuesCaptureListener(sensorsListener);
         gyroscope = new Gyroscope(context);
-        gyroscope.addSensorDataCaptureListener(sensorsListener);
+        gyroscope.addSensorValuesCaptureListener(sensorsListener);
         androidOrientationRotationVector = new RotationVector(context);
-        androidOrientationRotationVector.addSensorDataCaptureListener(sensorsListener);
+        androidOrientationRotationVector.addSensorValuesCaptureListener(sensorsListener);
     }
 
     public FusionImuKinematicEstimator(Context context, Handler handler) {
@@ -85,18 +82,18 @@ public class FusionImuKinematicEstimator extends VirtualSensor {
         sensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
         windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
         accelerometer = new Accelerometer(context, handler);
-        accelerometer.addSensorDataCaptureListener(sensorsListener);
+        accelerometer.addSensorValuesCaptureListener(sensorsListener);
         gyroscope = new Gyroscope(context, handler);
-        gyroscope.addSensorDataCaptureListener(sensorsListener);
+        gyroscope.addSensorValuesCaptureListener(sensorsListener);
         androidOrientationRotationVector = new RotationVector(context, handler);
-        androidOrientationRotationVector.addSensorDataCaptureListener(sensorsListener);
+        androidOrientationRotationVector.addSensorValuesCaptureListener(sensorsListener);
     }
 
     private SensorListener sensorsListener = new SensorListener() {
         @Override
         public void onSensorValuesCaptured(float[] values, int sensorType, long timeNanos) {
             switch (sensorType) {
-                case Accelerometer.SENSOR_UID: // accelerometer values (linear + gravity)
+                case SensorTypes.FULL_ACCELERATION: // accelerometer values (linear + gravity)
                     if (orientationInitialized) {
                         android.opengl.Matrix.invertM(fusionDeviceOrientationRotationMatrixInv.matrix,
                                 0, fusionDeviceOrientationRotationMatrix.matrix, 0);
@@ -118,19 +115,19 @@ public class FusionImuKinematicEstimator extends VirtualSensor {
                         absAccelerations[0] = nonRemappedAbsAccelerations[north];
                         absAccelerations[1] = nonRemappedAbsAccelerations[east];
                         absAccelerations[2] = nonRemappedAbsAccelerations[up];
-                        notifyAllSensorDataCaptureListeners(absAccelerations, TYPE_ABS_LINEAR_ACCELERATIONS,
-                                TimeUtils.currentAndroidSystemTimeNanos()); //TODO: sensorType
+                        notifyAllSensorValuesCaptureListeners(absAccelerations, SensorTypes.ABSOLUTE_LINEAR_ACCELERATION,
+                                TimeUtils.currentAndroidSystemTimeNanos());
                     }
                     break;
-                case Gyroscope.SENSOR_UID: // gyroscope values
+                case SensorTypes.GYROSCOPE_ANGLE_VELOCITY: // gyroscope values
                     if (timeNanos != 0) {
                         processGyroscopeFusion(values, timeNanos);
                         if (!orientationInitialized) orientationInitialized = true;
-                        notifyAllSensorDataCaptureListeners(currentDeviceOrientationAngles, TYPE_ORIENTATION_ANGLES,
-                                TimeUtils.currentAndroidSystemTimeNanos()); //TODO: sensorType
+                        notifyAllSensorValuesCaptureListeners(currentDeviceOrientationAngles, SensorTypes.ORIENTATION_ROTATION_ANGLES,
+                                TimeUtils.currentAndroidSystemTimeNanos());
                     }
                     break;
-                case RotationVector.SENSOR_UID: // orientation rotation vector values (accelerometer + magnetometer android native fusion)
+                case SensorTypes.ORIENTATION_ROTATION_VECTOR: // orientation rotation vector values (accelerometer + magnetometer android native fusion)
                     // get orientation rotation quaternion
                     SensorManager.getQuaternionFromVector(tmpOrientationQuaternionValues, values);
                     orientationRotationVectorQuaternion.setXYZW(tmpOrientationQuaternionValues[1],
