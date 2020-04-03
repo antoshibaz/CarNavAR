@@ -6,6 +6,7 @@ import android.location.Location;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Process;
+import android.util.Log;
 
 import com.app.carnavar.hal.location.KalmanGpsImuFusionEngine;
 import com.app.carnavar.services.gpsimu.GpsImuServiceInterfaces.GpsLocationListener;
@@ -22,6 +23,9 @@ public class GpsImuFusionLocationThread extends HandlerThread {
     private KalmanGpsImuFusionEngine kalmanGpsImuFusionEngine;
     private boolean isInitialized = false;
     private double lastMagneticDeclination = 0;
+    private boolean useMagneticDeclinationCorrection = true;
+
+    private Location lastLocation = null;
 
     private GpsLocationListener gpsLocationListener;
 
@@ -64,14 +68,19 @@ public class GpsImuFusionLocationThread extends HandlerThread {
         });
     }
 
-    public void postPredictTask(double xAcceleration, double yAcceleration, long timeMillis) {
+    public void postPredictTask(double xAcceleration, double yAcceleration, long timeMillis) { // xAcc-east, yAcc-north
         handler.post(() -> {
-            if (lastMagneticDeclination != 0) {
-                // correcting accelerations by magnetic declination
-                double yCorrAcc = xAcceleration * Math.cos(lastMagneticDeclination) + yAcceleration * Math.sin(lastMagneticDeclination);
-                double xCorrAcc = yAcceleration * Math.cos(lastMagneticDeclination) - xAcceleration * Math.sin(lastMagneticDeclination);
-                kalmanGpsImuFusionEngine.predict(xCorrAcc, yCorrAcc, timeMillis);
+            // TODO: magDec+useGpsSpeed not works correctly together -> fix it
+            if (useMagneticDeclinationCorrection
+                    && !kalmanGpsImuFusionEngine.getKalmanOptions().isUseGpsSpeed()) {
+                if (lastMagneticDeclination != 0) {
+                    // correcting accelerations by magnetic declination
+                    double xCorrAcc = xAcceleration * Math.cos(lastMagneticDeclination) - yAcceleration * Math.sin(lastMagneticDeclination);
+                    double yCorrAcc = yAcceleration * Math.cos(lastMagneticDeclination) + xAcceleration * Math.sin(lastMagneticDeclination);
+                    kalmanGpsImuFusionEngine.predict(xCorrAcc, yCorrAcc, timeMillis);
+                }
             } else {
+                //Log.d(TAG, "predict " + xAcceleration + " " + yAcceleration + " " + timeMillis);
                 kalmanGpsImuFusionEngine.predict(xAcceleration, yAcceleration, timeMillis);
             }
         });
@@ -99,15 +108,30 @@ public class GpsImuFusionLocationThread extends HandlerThread {
                     (float) location.getAltitude(),
                     timeMillis);
             lastMagneticDeclination = f.getDeclination();
+            Log.d(TAG, "mag declination=" + lastMagneticDeclination);
+            //Log.d(TAG, "pre update " + x + " " + y + " " + speed + " " + " " + bearing + " " + xVel + " " + yVel + " " + velVar + " " + timeMillis);
             kalmanGpsImuFusionEngine.update(x, y, xVel, yVel, posVar, velVar, timeMillis);
             Location newLocation = createLocationAfterUpdate(location);
-            if (gpsLocationListener != null) {
-                gpsLocationListener.onGpsLocationReturned(newLocation);
+
+            // sometimes filter gives is NAN - WTF?
+            // TODO: fix problem with filter NAN -> abs acceleration sometimes is NAN
+            if (!Double.isNaN(newLocation.getLongitude()) || !Double.isNaN(newLocation.getLatitude()) ||
+                    !Double.isNaN(newLocation.getSpeed())) {
+                lastLocation = newLocation;
+                if (gpsLocationListener != null) {
+                    gpsLocationListener.onGpsLocationReturned(newLocation);
+                }
+            } else {
+                Log.e(TAG, "Kalman is NAN. Reset it!");
+                postResetTask();
             }
         });
     }
 
     public void postResetTask() {
+        if (lastLocation != null) {
+            postInitTask(lastLocation);
+        }
     }
 
     private Location createLocationAfterUpdate(Location rawLocation) {
@@ -125,6 +149,8 @@ public class GpsImuFusionLocationThread extends HandlerThread {
         newLocation.setTime(TimeUtils.currentJavaSystemTimestampMillis());
         newLocation.setElapsedRealtimeNanos(TimeUtils.currentAndroidSystemTimeNanos());
         newLocation.setAccuracy(rawLocation.getAccuracy());
+        //Log.d(TAG, "post update " + kalmanGpsImuFusionEngine.getCurrentX() +
+        //        " " + kalmanGpsImuFusionEngine.getCurrentY() + " " + loc[0] + " " + loc[1] + " " + xVel + " " + yVel);
         return newLocation;
     }
 
@@ -172,5 +198,9 @@ public class GpsImuFusionLocationThread extends HandlerThread {
     public boolean quitSafely() {
         shutdown();
         return super.quitSafely();
+    }
+
+    public Location getLastLocation() {
+        return lastLocation;
     }
 }

@@ -1,4 +1,4 @@
-package uk.co.appoly.arcorelocation.sensor;
+package com.app.carnavar.ar.arcorelocation.sensor;
 
 import android.content.Context;
 import android.location.Criteria;
@@ -10,10 +10,10 @@ import android.os.SystemClock;
 import android.util.Log;
 import android.widget.Toast;
 
-import java.util.ArrayList;
+import com.app.carnavar.ar.arcorelocation.LocationScene;
+import com.app.carnavar.ar.arcorelocation.utils.KalmanLatLong;
 
-import uk.co.appoly.arcorelocation.LocationScene;
-import uk.co.appoly.arcorelocation.utils.KalmanLatLong;
+import java.util.ArrayList;
 
 /**
  * Created by John on 02/03/2018.

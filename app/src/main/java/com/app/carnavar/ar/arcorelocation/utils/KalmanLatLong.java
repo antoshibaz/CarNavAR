@@ -1,4 +1,4 @@
-package uk.co.appoly.arcorelocation.utils;
+package com.app.carnavar.ar.arcorelocation.utils;
 
 /**
  * Created by johnwedgbury on 01/06/2018.

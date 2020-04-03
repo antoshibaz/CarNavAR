@@ -112,6 +112,7 @@ public class FusionImuKinematicEstimator extends VirtualSensor {
 //                                break;
 //                        }
 
+                        // TODO: check and fix its because sometimes gives NAN
                         absAccelerations[0] = nonRemappedAbsAccelerations[north];
                         absAccelerations[1] = nonRemappedAbsAccelerations[east];
                         absAccelerations[2] = nonRemappedAbsAccelerations[up];
@@ -232,6 +233,7 @@ public class FusionImuKinematicEstimator extends VirtualSensor {
             // Both are nearly saying the same. Perform normal fusion.
             // Interpolate with a fixed weight between the two absolute quaternions obtained from gyro and rotation vector sensors
             // The weight should be quite low, so the rotation vector corrects the gyro only slowly, and the output keeps responsive.
+            //TODO: maybe use complimentary filter for fastest inference
             gyroOrientationQuaternion.slerp(orientationRotationVectorQuaternion, fusedInterpolOrientationQuaternion, GYRO_DIRECT_INTERPOLATION_WEIGHT);
             //quaternionGyroscope.slerp(quaternionRotationVector, interpolatedQuaternion, (float) (INDIRECT_INTERPOLATION_WEIGHT * gyroscopeRotationVelocity));
 

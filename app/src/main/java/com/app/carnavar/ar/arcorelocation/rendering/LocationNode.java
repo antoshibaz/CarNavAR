@@ -1,5 +1,8 @@
-package uk.co.appoly.arcorelocation.rendering;
+package com.app.carnavar.ar.arcorelocation.rendering;
 
+import com.app.carnavar.ar.arcorelocation.LocationMarker;
+import com.app.carnavar.ar.arcorelocation.LocationScene;
+import com.app.carnavar.ar.arcorelocation.utils.LocationUtils;
 import com.google.ar.core.Anchor;
 import com.google.ar.sceneform.AnchorNode;
 import com.google.ar.sceneform.FrameTime;
@@ -10,10 +13,6 @@ import com.google.ar.sceneform.math.Quaternion;
 import com.google.ar.sceneform.math.Vector3;
 
 import java.util.ArrayList;
-
-import uk.co.appoly.arcorelocation.LocationMarker;
-import uk.co.appoly.arcorelocation.LocationScene;
-import uk.co.appoly.arcorelocation.utils.LocationUtils;
 
 public class LocationNode extends AnchorNode {
 
@@ -181,9 +180,9 @@ public class LocationNode extends AnchorNode {
             int markerDistance = (int) Math.ceil(
                     LocationUtils.distance(
                             locationMarker.latitude,
-                            locationScene.deviceLocation.currentBestLocation.getLatitude(),
+                            locationScene.getCurrentLocation().getLatitude(),
                             locationMarker.longitude,
-                            locationScene.deviceLocation.currentBestLocation.getLongitude(),
+                            locationScene.getCurrentLocation().getLongitude(),
                             0,
                             0)
             );

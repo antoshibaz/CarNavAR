@@ -1,4 +1,4 @@
-package uk.co.appoly.arcorelocation.sensor;
+package com.app.carnavar.ar.arcorelocation.sensor;
 
 import android.location.Location;
 

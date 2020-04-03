@@ -69,6 +69,20 @@ public class GpsImuService extends Service {
         }
     }
 
+    public void retrieveCallingLastGpsLocation(GpsLocationListener gpsLocationListener) {
+        if (gpsLocationListenerList.contains(gpsLocationListener)) {
+            Location lastLoc = gpsImuFusionLocationThread.getLastLocation();
+            if (lastLoc != null) {
+                gpsLocationListener.onGpsLocationReturned(gpsImuFusionLocationThread.getLastLocation());
+            }
+        }
+    }
+
+    public void retrieveCallingLastImu(ImuListener imuListener) {
+        if (imuListenerList.contains(imuListener)) {
+        }
+    }
+
     private void publishToClients(Runnable r) {
         if (clientHandler != null) {
             clientHandler.post(r);
@@ -83,11 +97,15 @@ public class GpsImuService extends Service {
         gpsImuProviderThread = GpsImuProviderThread.createAndStart(this.getApplicationContext());
         gpsImuProviderThread.setImuListener((values, sensorType, timeNanos) -> {
             switch (sensorType) {
-                case SensorTypes.ORIENTATION_ROTATION_ANGLES:
-                    // orientation
+                case SensorTypes.ORIENTATION_ROTATION_ANGLES: // orientation
                     break;
-                case SensorTypes.ABSOLUTE_LINEAR_ACCELERATION:
-                    // abs accelerations
+                case SensorTypes.ABSOLUTE_LINEAR_ACCELERATION: // abs accelerations
+                    // TODO: fix NAN
+                    if (Float.isNaN(values[0]) || Float.isNaN(values[1])) {
+                        Log.e(TAG, "abs accelerations is NAN. Values is dropped!");
+                        return;
+                    }
+
                     if (gpsImuFusionLocationThread != null) {
                         int north = 0, east = 1, up = 2;
                         if (gpsImuFusionLocationThread.isInitialized()) {

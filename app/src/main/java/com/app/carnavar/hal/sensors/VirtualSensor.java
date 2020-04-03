@@ -1,10 +1,8 @@
 package com.app.carnavar.hal.sensors;
 
-import android.hardware.SensorManager;
 import android.os.Handler;
 
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
 
 public abstract class VirtualSensor {
@@ -14,7 +12,7 @@ public abstract class VirtualSensor {
     private List<SensorListener> sensorListeners = new ArrayList<>();
 
     protected float[] rawValues = null;
-    protected int sampleRatePeriodTimeMicros = SensorManager.SENSOR_DELAY_GAME;
+    protected int sampleRatePeriodTimeMicros = 50_000; // SensorManager.SENSOR_DELAY_GAME=20000
 
     protected Handler handler = null;
 

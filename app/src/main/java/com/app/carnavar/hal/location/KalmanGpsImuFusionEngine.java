@@ -8,6 +8,7 @@ public class KalmanGpsImuFusionEngine {
     public static final String TAG = KalmanGpsImuFusionEngine.class.getSimpleName();
 
     private KalmanFilter kalmanFilter;
+
     private KalmanOptions kalmanOptions;
 
     private int measureDimension, stateDimension, controlDimension;
@@ -30,6 +31,22 @@ public class KalmanGpsImuFusionEngine {
             return new KalmanOptions();
         }
 
+        public boolean isUseGpsSpeed() {
+            return useGpsSpeed;
+        }
+
+        public double getAccelerationDeviance() {
+            return accelerationDeviance;
+        }
+
+        public double getVelocityMulFactor() {
+            return velocityMulFactor;
+        }
+
+        public double getPositionMulFactor() {
+            return positionMulFactor;
+        }
+
         public KalmanOptions useGpsSpeed(boolean useGpsSpeed) {
             this.useGpsSpeed = useGpsSpeed;
             return this;
@@ -49,6 +66,10 @@ public class KalmanGpsImuFusionEngine {
             this.positionMulFactor = positionMulFactor;
             return this;
         }
+    }
+
+    public KalmanOptions getKalmanOptions() {
+        return kalmanOptions;
     }
 
     public KalmanGpsImuFusionEngine(KalmanOptions kalmanOptions) {

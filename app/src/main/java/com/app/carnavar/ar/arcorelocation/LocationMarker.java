@@ -1,10 +1,8 @@
-package uk.co.appoly.arcorelocation;
+package com.app.carnavar.ar.arcorelocation;
 
-import com.google.ar.sceneform.AnchorNode;
+import com.app.carnavar.ar.arcorelocation.rendering.LocationNode;
+import com.app.carnavar.ar.arcorelocation.rendering.LocationNodeRender;
 import com.google.ar.sceneform.Node;
-
-import uk.co.appoly.arcorelocation.rendering.LocationNode;
-import uk.co.appoly.arcorelocation.rendering.LocationNodeRender;
 
 /**
  * Created by John on 02/03/2018.

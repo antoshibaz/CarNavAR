@@ -15,9 +15,13 @@ import android.view.WindowManager;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.app.carnavar.hal.orientation.FusionDeviceOrientationEstimator;
+import com.app.carnavar.ar.arcorelocation.LocationMarker;
+import com.app.carnavar.ar.arcorelocation.LocationScene;
+import com.app.carnavar.ar.arcorelocation.rendering.LocationNode;
+import com.app.carnavar.ar.arcorelocation.rendering.LocationNodeRender;
+import com.app.carnavar.ar.arcorelocation.sensor.DeviceLocationChanged;
+import com.app.carnavar.ar.arcorelocation.utils.ARLocationPermissionHelper;
 import com.app.carnavar.hal.sensors.SensorTypes;
-import com.app.carnavar.hal.sensors.VirtualSensor;
 import com.app.carnavar.maps.NavMap;
 import com.app.carnavar.services.ServicesRepository;
 import com.app.carnavar.services.gpsimu.GpsImuService;
@@ -47,12 +51,6 @@ import java.util.concurrent.ExecutionException;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
-import uk.co.appoly.arcorelocation.LocationMarker;
-import uk.co.appoly.arcorelocation.LocationScene;
-import uk.co.appoly.arcorelocation.rendering.LocationNode;
-import uk.co.appoly.arcorelocation.rendering.LocationNodeRender;
-import uk.co.appoly.arcorelocation.sensor.DeviceLocationChanged;
-import uk.co.appoly.arcorelocation.utils.ARLocationPermissionHelper;
 
 
 public class ArActivity extends AppCompatActivity {
@@ -76,9 +74,16 @@ public class ArActivity extends AppCompatActivity {
 
     private GpsImuServiceInterfaces.ImuListener imuListener = (values, sensorType, timeNanos) -> {
         if (sensorType == SensorTypes.ORIENTATION_ROTATION_ANGLES) {
+            if (navMap != null)
+                navMap.updateOrientation(values[0]);
+            if (locationScene != null)
+                locationScene.updateBearing(values[0]);
             Log.d(TAG, " bearing=" + String.valueOf(values[0]));
-            navMap.updateOrientation(values[0]);
         }
+    };
+
+    private GpsImuServiceInterfaces.GpsLocationListener gpsLocationListener = location -> {
+        locationScene.updateGpsLocation(location);
     };
 
     @Override
@@ -146,15 +151,12 @@ public class ArActivity extends AppCompatActivity {
                                 // We know that here, the AR components have been initiated
                                 // speed 150 km/h = 42 m/s | refresh - 10-50ms
                                 locationScene = new LocationScene(this, arSceneView);
+//                                ServicesRepository.getInstance().getService(GpsImuService.class, serviceInstance -> {
+//                                    serviceInstance.retrieveCallingLastGpsLocation(gpsLocationListener);
+//                                });
                                 locationScene.refreshAnchors();
 //                                locationScene.setAnchorRefreshInterval(30);
                                 locationScene.setRefreshAnchorsAsLocationChanges(true);
-                                locationScene.setLocationChangedEvent(new DeviceLocationChanged() {
-                                    @Override
-                                    public void onChange(Location location) {
-                                        Toast.makeText(getApplicationContext(), "New loc: " + location.getLatitude() + " " + location.getLongitude(), Toast.LENGTH_SHORT).show();
-                                    }
-                                });
 
                                 // Now lets create our location markers.
                                 // First, a layout
@@ -341,11 +343,12 @@ public class ArActivity extends AppCompatActivity {
         ServicesRepository.getInstance().startService(getApplicationContext(), GpsImuService.class, () -> {
             ServicesRepository.getInstance().getService(GpsImuService.class, serviceInstance -> {
                 serviceInstance.registerImuListener(imuListener);
+                serviceInstance.registerGpsLocationListener(gpsLocationListener);
             });
         });
 
         if (locationScene != null) {
-            locationScene.resume();
+            locationScene.onPause();
         }
 
         if (arSceneView.getSession() == null) {
@@ -388,11 +391,12 @@ public class ArActivity extends AppCompatActivity {
 
         ServicesRepository.getInstance().getService(GpsImuService.class, serviceInstance -> {
             serviceInstance.unregisterImuListener(imuListener);
+            serviceInstance.unregisterGpsLocationListener(gpsLocationListener);
         });
         ServicesRepository.getInstance().stopService(getApplicationContext(), GpsImuService.class);
 
         if (locationScene != null) {
-            locationScene.pause();
+            locationScene.onResume();
         }
 
         arSceneView.pause();

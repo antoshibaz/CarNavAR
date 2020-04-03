@@ -1,4 +1,4 @@
-package uk.co.appoly.arcorelocation.utils;
+package com.app.carnavar.ar.arcorelocation.utils;
 
 import android.Manifest;
 import android.app.Activity;

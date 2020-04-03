@@ -1,9 +1,15 @@
-package uk.co.appoly.arcorelocation;
+package com.app.carnavar.ar.arcorelocation;
 
 import android.app.Activity;
+import android.location.Location;
 import android.os.Handler;
 import android.util.Log;
 
+import com.app.carnavar.ar.arcorelocation.rendering.LocationNode;
+import com.app.carnavar.ar.arcorelocation.sensor.DeviceLocation;
+import com.app.carnavar.ar.arcorelocation.sensor.DeviceLocationChanged;
+import com.app.carnavar.ar.arcorelocation.sensor.DeviceOrientation;
+import com.app.carnavar.ar.arcorelocation.utils.LocationUtils;
 import com.google.ar.core.Anchor;
 import com.google.ar.core.Frame;
 import com.google.ar.core.Pose;
@@ -13,22 +19,14 @@ import com.google.ar.sceneform.math.Vector3;
 
 import java.util.ArrayList;
 
-import uk.co.appoly.arcorelocation.rendering.LocationNode;
-import uk.co.appoly.arcorelocation.sensor.DeviceLocation;
-import uk.co.appoly.arcorelocation.sensor.DeviceLocationChanged;
-import uk.co.appoly.arcorelocation.sensor.DeviceOrientation;
-import uk.co.appoly.arcorelocation.utils.LocationUtils;
-
-/**
- * Created by John on 02/03/2018.
- */
-
 public class LocationScene {
+
+    public static final String TAG = LocationScene.class.getSimpleName();
 
     private float RENDER_DISTANCE = 25f;
     public ArSceneView mArSceneView;
-    public DeviceLocation deviceLocation;
-    public DeviceOrientation deviceOrientation;
+    //public DeviceLocation deviceLocation;
+    //public DeviceOrientation deviceOrientation;
     public Activity context;
     public ArrayList<LocationMarker> mLocationMarkers = new ArrayList<>();
     // Anchors are currently re-drawn on an interval. There are likely better
@@ -39,9 +37,6 @@ public class LocationScene {
     private int distanceLimit = 30;
     private boolean offsetOverlapping = false;
     private boolean removeOverlapping = false;
-    // Bearing adjustment. Can be set to calibrate with true north
-    private int bearingAdjustment = 0;
-    private String TAG = "LocationScene";
     private boolean anchorsNeedRefresh = true;
     private boolean minimalRefreshing = false;
     private boolean refreshAnchorsAsLocationChanges = false;
@@ -57,6 +52,11 @@ public class LocationScene {
     private Session mSession;
     private DeviceLocationChanged locationChangedEvent;
 
+    private Location currentLocation = null;
+    private double currentBearing = 0.0f;
+    // Bearing adjustment. Can be set to calibrate with true north
+    private int bearingAdjustment = 0;
+
     public LocationScene(Activity context, ArSceneView mArSceneView) {
         this.context = context;
         this.mSession = mArSceneView.getSession();
@@ -64,10 +64,18 @@ public class LocationScene {
 
         startCalculationTask();
 
-        deviceLocation = new DeviceLocation(context, this);
-        deviceOrientation = new DeviceOrientation(context);
-        deviceOrientation.resume();
+//        deviceLocation = new DeviceLocation(context, this);
+//        deviceOrientation = new DeviceOrientation(context);
+//        deviceOrientation.resume();
         //test();
+    }
+
+    public Location getCurrentLocation() {
+        return currentLocation;
+    }
+
+    public double getCurrentBearing() {
+        return currentBearing;
     }
 
     private void test() {
@@ -228,7 +236,7 @@ public class LocationScene {
         anchorsNeedRefresh = false;
         Log.i(TAG, "Refreshing anchors...");
 
-        if (deviceLocation == null || deviceLocation.currentBestLocation == null) {
+        if (currentLocation == null) {
             Log.i(TAG, "Location not yet established.");
             return;
         }
@@ -239,9 +247,9 @@ public class LocationScene {
                 int markerDistance = (int) Math.round(
                         LocationUtils.distance(
                                 marker.latitude,
-                                deviceLocation.currentBestLocation.getLatitude(),
+                                currentLocation.getLatitude(),
                                 marker.longitude,
-                                deviceLocation.currentBestLocation.getLongitude(),
+                                currentLocation.getLongitude(),
                                 0,
                                 0)
                 );
@@ -254,12 +262,12 @@ public class LocationScene {
                 }
 
                 float bearing = (float) LocationUtils.bearing(
-                        deviceLocation.currentBestLocation.getLatitude(),
-                        deviceLocation.currentBestLocation.getLongitude(),
+                        currentLocation.getLatitude(),
+                        currentLocation.getLongitude(),
                         marker.latitude,
                         marker.longitude);
 
-                float markerBearing = bearing - deviceOrientation.getOrientation();
+                float markerBearing = bearing - (float) currentBearing;
 
                 // Bearing adjustment can be set if you are trying to
                 // correct the heading of north - setBearingAdjustment(10)
@@ -268,7 +276,7 @@ public class LocationScene {
 
                 double rotation = Math.floor(markerBearing);
 
-                Log.d(TAG, "currentDegree " + deviceOrientation.getOrientation()
+                Log.d(TAG, "currentDegree " + (float) currentBearing
                         + " bearing " + bearing + " markerBearing " + markerBearing
                         + " rotation " + rotation + " distance " + markerDistance);
 
@@ -355,6 +363,17 @@ public class LocationScene {
         System.gc();
     }
 
+    public void updateGpsLocation(Location location) {
+        currentLocation = location;
+        if (refreshAnchorsAsLocationChanges()) {
+            refreshAnchors();
+        }
+    }
+
+    public void updateBearing(double bearing) {
+        currentBearing = bearing;
+    }
+
     /**
      * Adjustment for compass bearing.
      *
@@ -378,17 +397,17 @@ public class LocationScene {
     /**
      * Resume sensor services. Important!
      */
-    public void resume() {
-        deviceOrientation.resume();
-        deviceLocation.resume();
+    public void onPause() {
+//        deviceOrientation.resume();
+//        deviceLocation.resume();
     }
 
     /**
      * Pause sensor services. Important!
      */
-    public void pause() {
-        deviceOrientation.pause();
-        deviceLocation.pause();
+    public void onResume() {
+//        deviceOrientation.pause();
+//        deviceLocation.pause();
     }
 
     void startCalculationTask() {

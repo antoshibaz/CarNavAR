@@ -79,6 +79,8 @@ public class ServicesRepository {
         if (!serviceRepositoryRegistry.containsKey(serviceCls) && !serviceConnectionCallbacksRegistry.containsKey(serviceCls)) {
             Intent serviceIntent = new Intent(context.getApplicationContext(), serviceCls);
             context.getApplicationContext().bindService(serviceIntent, serviceConnection, Context.BIND_AUTO_CREATE);
+        } else {
+            serviceStartedCallback.onServiceStarted();
         }
     }
 
@@ -99,5 +101,9 @@ public class ServicesRepository {
             T service = (T) serviceRepositoryRegistry.get(serviceCls);
             queryCallback.onCall(service);
         }
+    }
+
+    public synchronized <T extends Service> boolean serviceIsStarted(Class<T> serviceCls) {
+        return serviceRepositoryRegistry.containsKey(serviceCls);
     }
 }
