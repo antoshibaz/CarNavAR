@@ -9,7 +9,7 @@ import android.widget.Toast;
 import com.app.carnavar.services.ServicesRepository;
 import com.app.carnavar.services.gpsimu.GpsImuService;
 import com.app.carnavar.services.gpsimu.GpsImuServiceInterfaces;
-import com.app.carnavar.utils.android.ThemeManager;
+import com.app.carnavar.utils.android.ThemeUtils;
 import com.mapbox.android.core.location.LocationEngine;
 import com.mapbox.android.core.location.LocationEngineCallback;
 import com.mapbox.android.core.location.LocationEngineProvider;
@@ -233,7 +233,7 @@ public class NavMap {
     }
 
     private void initNavMapMarkerManager(MapView mapView, MapboxMap mapboxMap) {
-        Bitmap markerBitmap = ThemeManager.retrieveThemeMapMarker(mapView.getContext());
+        Bitmap markerBitmap = ThemeUtils.retrieveThemeMapMarker(mapView.getContext());
         Style style = mapboxMap.getStyle();
         if (style != null) {
             SymbolManager symbolManager = new SymbolManager(mapView, mapboxMap, style);

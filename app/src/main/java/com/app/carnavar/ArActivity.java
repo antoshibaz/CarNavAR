@@ -1,17 +1,11 @@
 package com.app.carnavar;
 
-import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
-import android.location.Location;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.util.Log;
-import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.WindowManager;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -19,25 +13,21 @@ import com.app.carnavar.ar.arcorelocation.LocationMarker;
 import com.app.carnavar.ar.arcorelocation.LocationScene;
 import com.app.carnavar.ar.arcorelocation.rendering.LocationNode;
 import com.app.carnavar.ar.arcorelocation.rendering.LocationNodeRender;
-import com.app.carnavar.ar.arcorelocation.sensor.DeviceLocationChanged;
-import com.app.carnavar.ar.arcorelocation.utils.ARLocationPermissionHelper;
 import com.app.carnavar.hal.sensors.SensorTypes;
 import com.app.carnavar.maps.NavMap;
 import com.app.carnavar.services.ServicesRepository;
 import com.app.carnavar.services.gpsimu.GpsImuService;
 import com.app.carnavar.services.gpsimu.GpsImuServiceInterfaces;
+import com.app.carnavar.utils.android.DisplayMessagesUtils;
+import com.app.carnavar.utils.android.DisplayUtils;
+import com.app.carnavar.utils.android.LibsUtils;
 import com.google.android.material.snackbar.Snackbar;
-import com.google.ar.core.ArCoreApk;
-import com.google.ar.core.Config;
 import com.google.ar.core.Frame;
 import com.google.ar.core.Session;
+import com.google.ar.core.SharedCamera;
 import com.google.ar.core.TrackingState;
 import com.google.ar.core.exceptions.CameraNotAvailableException;
-import com.google.ar.core.exceptions.UnavailableApkTooOldException;
-import com.google.ar.core.exceptions.UnavailableArcoreNotInstalledException;
-import com.google.ar.core.exceptions.UnavailableDeviceNotCompatibleException;
 import com.google.ar.core.exceptions.UnavailableException;
-import com.google.ar.core.exceptions.UnavailableSdkTooOldException;
 import com.google.ar.sceneform.ArSceneView;
 import com.google.ar.sceneform.Node;
 import com.google.ar.sceneform.rendering.ViewRenderable;
@@ -61,7 +51,11 @@ public class ArActivity extends AppCompatActivity {
     private boolean hasFinishedLoading = false;
 
     private Snackbar loadingMessageSnackbar = null;
+
+    private Session arCoreSession;
     private ArSceneView arSceneView;
+
+    private SharedCamera sharedCamera;
 
     // ARCore-Location scene world
     private LocationScene locationScene;
@@ -83,19 +77,48 @@ public class ArActivity extends AppCompatActivity {
     };
 
     private GpsImuServiceInterfaces.GpsLocationListener gpsLocationListener = location -> {
-        locationScene.updateGpsLocation(location);
+        if (locationScene != null) {
+            locationScene.updateGpsLocation(location);
+        }
     };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // check arcore availability
+        try {
+            LibsUtils.ARCore.checkAvailabilityAndInstallIfNeeded(this);
+        } catch (UnavailableException e) {
+            String excMsg = LibsUtils.ARCore.handleException(e);
+            Log.e(TAG, excMsg);
+            DisplayMessagesUtils.showToastMsg(this, excMsg);
+            finish();
+        }
+
         setContentView(R.layout.activity_ar);
 
         // get data from previous activity
         Intent intent = getIntent();
         final double[] dstPoiMarker = Objects.requireNonNull(intent.getExtras()).getDoubleArray("destination_marker");
 
+        // create arcore scene view and custom session
         arSceneView = findViewById(R.id.ar_scene_view);
+        try {
+            arCoreSession = LibsUtils.ARCore.createARCoreSession(this, true);
+            sharedCamera = arCoreSession.getSharedCamera();
+            Log.d(TAG, "Selected ARCore camera -> " + LibsUtils.ARCore.handleCameraConfig(arCoreSession.getCameraConfig()));
+            // TODO: shared camera image capturing
+            // When ARCore is running, make sure it also updates our CPU image surface.
+            //    sharedCamera.setAppSurfaces(this.cameraId, Arrays.asList(cpuImageReader.getSurface()));
+        } catch (UnavailableException e) {
+            String excMsg = LibsUtils.ARCore.handleException(e);
+            Log.e(TAG, excMsg);
+            DisplayMessagesUtils.showToastMsg(this, excMsg);
+            finish();
+        }
+        arSceneView.setupSession(arCoreSession);
+
+        // init maps
         navMapView = findViewById(R.id.miniNavMapView);
         navMapView.onCreate(savedInstanceState);
         navMap = new NavMap(navMapView, getString(R.string.mapbox_map_style_streets));
@@ -264,69 +287,6 @@ public class ArActivity extends AppCompatActivity {
         loadingMessageSnackbar = null;
     }
 
-    public static void displayError(
-            final Context context, final String errorMsg, @Nullable final Throwable problem) {
-        final String tag = context.getClass().getSimpleName();
-        final String toastText;
-        if (problem != null && problem.getMessage() != null) {
-            Log.e(tag, errorMsg, problem);
-            toastText = errorMsg + ": " + problem.getMessage();
-        } else if (problem != null) {
-            Log.e(tag, errorMsg, problem);
-            toastText = errorMsg;
-        } else {
-            Log.e(tag, errorMsg);
-            toastText = errorMsg;
-        }
-
-        new Handler(Looper.getMainLooper())
-                .post(
-                        () -> {
-                            Toast toast = Toast.makeText(context, toastText, Toast.LENGTH_LONG);
-                            toast.setGravity(Gravity.CENTER, 0, 0);
-                            toast.show();
-                        });
-    }
-
-    public static Session createArSession(Activity activity, boolean installRequested)
-            throws UnavailableException {
-        Session session = null;
-        // if we have the camera permission, create the session
-        if (ARLocationPermissionHelper.hasPermission(activity)) {
-            switch (ArCoreApk.getInstance().requestInstall(activity, !installRequested)) {
-                case INSTALL_REQUESTED:
-                    return null;
-                case INSTALLED:
-                    break;
-            }
-            session = new Session(activity);
-            // IMPORTANT!!! ArSceneView needs to use the non-blocking update mode.
-            Config config = new Config(session);
-            config.setUpdateMode(Config.UpdateMode.LATEST_CAMERA_IMAGE);
-            session.configure(config);
-        }
-        return session;
-    }
-
-    public static void handleSessionException(
-            Activity activity, UnavailableException sessionException) {
-
-        String message;
-        if (sessionException instanceof UnavailableArcoreNotInstalledException) {
-            message = "Please install ARCore";
-        } else if (sessionException instanceof UnavailableApkTooOldException) {
-            message = "Please update ARCore";
-        } else if (sessionException instanceof UnavailableSdkTooOldException) {
-            message = "Please update this app";
-        } else if (sessionException instanceof UnavailableDeviceNotCompatibleException) {
-            message = "This device does not support AR";
-        } else {
-            message = "Failed to create AR session";
-            Log.e(TAG, "Exception: " + sessionException);
-        }
-        Toast.makeText(activity, message, Toast.LENGTH_LONG).show();
-    }
-
     @Override
     public void onStart() {
         super.onStart();
@@ -340,30 +300,24 @@ public class ArActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
 
-        ServicesRepository.getInstance().startService(getApplicationContext(), GpsImuService.class, () -> {
-            ServicesRepository.getInstance().getService(GpsImuService.class, serviceInstance -> {
-                serviceInstance.registerImuListener(imuListener);
-                serviceInstance.registerGpsLocationListener(gpsLocationListener);
-            });
-        });
-
         if (locationScene != null) {
-            locationScene.onPause();
+            locationScene.onResume();
         }
 
         if (arSceneView.getSession() == null) {
             // If the session wasn't created yet, don't resume rendering.
             // This can happen if ARCore needs to be updated or permissions are not granted yet.
             try {
-                Session session = createArSession(this, installRequested);
-                if (session == null) {
-                    installRequested = ARLocationPermissionHelper.hasPermission(this);
-                    return;
-                } else {
-                    arSceneView.setupSession(session);
+                boolean arcoreIsInstalled = LibsUtils.ARCore.requestInstalling(this);
+                if (arcoreIsInstalled) {
+                    // create session
+                    arCoreSession = LibsUtils.ARCore.createARCoreSession(this, true);
+                    sharedCamera = arCoreSession.getSharedCamera();
+                    arSceneView.setupSession(arCoreSession);
                 }
             } catch (UnavailableException e) {
-                handleSessionException(this, e);
+                String excMsg = LibsUtils.ARCore.handleException(e);
+                Log.d(TAG, excMsg);
             }
         }
 
@@ -371,6 +325,7 @@ public class ArActivity extends AppCompatActivity {
             arSceneView.resume();
         } catch (CameraNotAvailableException ex) {
             displayError(this, "Unable to get camera", ex);
+            DisplayMessagesUtils.showToastMsg(this, "Unable to get ARCore camera");
             finish();
             return;
         }
@@ -380,6 +335,13 @@ public class ArActivity extends AppCompatActivity {
         }
 
         navMapView.onResume();
+
+        ServicesRepository.getInstance().startService(getApplicationContext(), GpsImuService.class, () -> {
+            ServicesRepository.getInstance().getService(GpsImuService.class, serviceInstance -> {
+                serviceInstance.registerImuListener(imuListener);
+                serviceInstance.registerGpsLocationListener(gpsLocationListener);
+            });
+        });
     }
 
     /**
@@ -396,7 +358,7 @@ public class ArActivity extends AppCompatActivity {
         ServicesRepository.getInstance().stopService(getApplicationContext(), GpsImuService.class);
 
         if (locationScene != null) {
-            locationScene.onResume();
+            locationScene.onPause();
         }
 
         arSceneView.pause();
@@ -424,36 +386,31 @@ public class ArActivity extends AppCompatActivity {
     }
 
     @Override
-    public void onRequestPermissionsResult(
-            int requestCode, @NonNull String[] permissions, @NonNull int[] results) {
-        if (!ARLocationPermissionHelper.hasPermission(this)) {
-            if (!ARLocationPermissionHelper.shouldShowRequestPermissionRationale(this)) {
-                // Permission denied with checking "Do not ask again".
-                ARLocationPermissionHelper.launchPermissionSettings(this);
-            } else {
-                Toast.makeText(
-                        this, "Camera permission is needed to run this application", Toast.LENGTH_LONG)
-                        .show();
-            }
-            finish();
-        }
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] results) {
+        // all permissions can be checked and allowed in previous calling activity
+        // if not then use it
     }
 
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if (hasFocus) {
-            // Standard Android full-screen functionality.
-            getWindow()
-                    .getDecorView()
-                    .setSystemUiVisibility(
-                            View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                                    | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                                    | View.SYSTEM_UI_FLAG_FULLSCREEN
-                                    | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
-            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        DisplayUtils.setFullScreenOnWindowFocusChanged(this, hasFocus);
+    }
+
+    public static void displayError(final Context context, final String errorMsg, @Nullable final Throwable problem) {
+        final String tag = context.getClass().getSimpleName();
+        final String toastText;
+        if (problem != null && problem.getMessage() != null) {
+            Log.e(tag, errorMsg, problem);
+            toastText = errorMsg + ": " + problem.getMessage();
+        } else if (problem != null) {
+            Log.e(tag, errorMsg, problem);
+            toastText = errorMsg;
+        } else {
+            Log.e(tag, errorMsg);
+            toastText = errorMsg;
         }
+
+        DisplayMessagesUtils.showToastMsg(context, toastText);
     }
 }

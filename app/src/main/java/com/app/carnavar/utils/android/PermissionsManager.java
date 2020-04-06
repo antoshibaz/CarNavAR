@@ -2,7 +2,10 @@ package com.app.carnavar.utils.android;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.net.Uri;
+import android.provider.Settings;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -61,6 +64,14 @@ public class PermissionsManager {
         }
 
         ActivityCompat.requestPermissions(activity, permissions, PERMISSIONS_REQUEST_CODE);
+    }
+
+    /** Launch Application Setting to grant permission. */
+    public static void launchPermissionSettings(Activity activity) {
+        Intent intent = new Intent();
+        intent.setAction(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+        intent.setData(Uri.fromParts("package", activity.getPackageName(), null));
+        activity.startActivity(intent);
     }
 
     /**

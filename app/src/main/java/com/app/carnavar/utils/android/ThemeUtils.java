@@ -10,7 +10,7 @@ import com.mapbox.mapboxsdk.utils.BitmapUtils;
 
 import androidx.core.content.ContextCompat;
 
-public class ThemeManager {
+public class ThemeUtils {
 
     /**
      * Returns a map marker {@link Bitmap} based on the current theme setting.
