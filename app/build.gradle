@@ -1,4 +1,10 @@
 apply plugin: 'com.android.application'
+apply plugin: 'com.google.ar.sceneform.plugin'
+
+sceneform.asset('sampledata/models/RLab-arrow.obj',
+        'default',
+        'src/main/assets/models/RLab-arrow.sfa',
+        'src/main/assets/models/RLab-arrow')
 
 android {
     compileSdkVersion 28

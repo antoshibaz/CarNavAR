@@ -1,0 +1,41 @@
+{
+  materials: [
+    {
+      name: 'SVGMat.003',
+      parameters: [
+        {
+          baseColor: null,
+        },
+        {
+          baseColorTint: [
+            0.001518,
+            0.16202900000000001,
+            0.76815100000000003,
+            1,
+          ],
+        },
+        {
+          metallic: 0,
+        },
+        {
+          roughness: 0.078326000000000007,
+        },
+        {
+          opacity: null,
+        },
+      ],
+      source: 'build/sceneform_sdk/default_materials/obj_material.sfm',
+    },
+  ],
+  model: {
+    attributes: [
+      'Position',
+      'Orientation',
+    ],
+    collision: {},
+    file: 'sampledata/models/RLab-arrow.obj',
+    name: 'RLab-arrow',
+    recenter: 'root',
+  },
+  version: '0.54:2',
+}

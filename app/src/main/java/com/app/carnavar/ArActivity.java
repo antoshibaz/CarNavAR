@@ -2,6 +2,9 @@ package com.app.carnavar;
 
 import android.content.Context;
 import android.content.Intent;
+import android.media.Image;
+import android.media.ImageReader;
+import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.MotionEvent;
@@ -18,6 +21,7 @@ import com.app.carnavar.maps.NavMap;
 import com.app.carnavar.services.ServicesRepository;
 import com.app.carnavar.services.gpsimu.GpsImuService;
 import com.app.carnavar.services.gpsimu.GpsImuServiceInterfaces;
+import com.app.carnavar.utils.MapsUtils;
 import com.app.carnavar.utils.android.DisplayMessagesUtils;
 import com.app.carnavar.utils.android.DisplayUtils;
 import com.app.carnavar.utils.android.LibsUtils;
@@ -27,10 +31,16 @@ import com.google.ar.core.Session;
 import com.google.ar.core.SharedCamera;
 import com.google.ar.core.TrackingState;
 import com.google.ar.core.exceptions.CameraNotAvailableException;
+import com.google.ar.core.exceptions.NotYetAvailableException;
 import com.google.ar.core.exceptions.UnavailableException;
 import com.google.ar.sceneform.ArSceneView;
 import com.google.ar.sceneform.Node;
+import com.google.ar.sceneform.math.Quaternion;
+import com.google.ar.sceneform.math.Vector3;
+import com.google.ar.sceneform.rendering.ModelRenderable;
+import com.google.ar.sceneform.rendering.Renderable;
 import com.google.ar.sceneform.rendering.ViewRenderable;
+import com.google.ar.sceneform.ux.TransformableNode;
 import com.mapbox.geojson.Point;
 import com.mapbox.mapboxsdk.maps.MapView;
 
@@ -41,7 +51,6 @@ import java.util.concurrent.ExecutionException;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
-
 
 public class ArActivity extends AppCompatActivity {
 
@@ -65,6 +74,10 @@ public class ArActivity extends AppCompatActivity {
 
     private MapView navMapView;
     private NavMap navMap;
+
+    private ImageReader imageReader;
+
+    private Renderable arrowRenderable;
 
     private GpsImuServiceInterfaces.ImuListener imuListener = (values, sensorType, timeNanos) -> {
         if (sensorType == SensorTypes.ORIENTATION_ROTATION_ANGLES) {
@@ -110,6 +123,23 @@ public class ArActivity extends AppCompatActivity {
             // TODO: shared camera image capturing
             // When ARCore is running, make sure it also updates our CPU image surface.
             //    sharedCamera.setAppSurfaces(this.cameraId, Arrays.asList(cpuImageReader.getSurface()));
+            // Use the currently configured CPU image size.
+//            Size desiredImageSize = arCoreSession.getCameraConfig().getImageSize();
+//            imageReader = ImageReader.newInstance(
+//                            desiredImageSize.getWidth(),
+//                            desiredImageSize.getHeight(),
+//                            ImageFormat.YUV_420_888,
+//                            2);
+//            imageReader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
+//                @Override
+//                public void onImageAvailable(ImageReader reader) {
+//                    Image image = imageReader.acquireLatestImage();
+//                    image.close();
+//                    Log.d(TAG, "Camera image captured");
+//                }
+//            }, null);
+//            sharedCamera.setAppSurfaces(arCoreSession.getCameraConfig().getCameraId(),
+//                    Arrays.asList(imageReader.getSurface()));
         } catch (UnavailableException e) {
             String excMsg = LibsUtils.ARCore.handleException(e);
             Log.e(TAG, excMsg);
@@ -135,8 +165,12 @@ public class ArActivity extends AppCompatActivity {
                         .setView(this, R.layout.poi_ar_view)
                         .build();
 
+        CompletableFuture<ModelRenderable> arrowModel = ModelRenderable.builder()
+                .setSource(this, Uri.parse("models/RLab-arrow.sfb"))
+                .build();
+
         CompletableFuture.allOf(
-                poiLayout)
+                poiLayout, arrowModel)
                 .handle(
                         (notUsed, throwable) -> {
                             // When you build a Renderable, Sceneform loads its resources in the background while
@@ -150,6 +184,7 @@ public class ArActivity extends AppCompatActivity {
 
                             try {
                                 poiArView = poiLayout.get();
+                                arrowRenderable = arrowModel.get();
                                 hasFinishedLoading = true;
 
                             } catch (InterruptedException | ExecutionException ex) {
@@ -203,12 +238,28 @@ public class ArActivity extends AppCompatActivity {
                                 });
                                 // Adding the marker to list
                                 locationScene.mLocationMarkers.add(poiLocationMarker);
+                                double[] latLng = MapsUtils.getDstLocationByBearingAndDistance(dstPoiMarker[1], dstPoiMarker[0], 180, 100);
+                                LocationMarker arrowNode = new LocationMarker(latLng[1], latLng[0], getArrow());
+                                arrowNode.setRenderEvent(new LocationNodeRender() {
+                                    @Override
+                                    public void render(LocationNode node) {
+//                                        for (Node n : node.getChildren()) {
+//                                            n.setLocalRotation(Quaternion.axisAngle(new Vector3(0f, 1f, 0f), 90f));
+//                                        }
+                                    }
+                                });
+                                locationScene.mLocationMarkers.add(arrowNode);
                             }
 
                             Frame frame = arSceneView.getArFrame();
-
                             if (frame == null) {
                                 return;
+                            }
+
+                            try (Image image = frame.acquireCameraImage()) {
+                                Log.d(TAG, "" + image.getHeight() + "x" + image.getWidth());
+                            } catch (NotYetAvailableException e) {
+                                e.printStackTrace();
                             }
 
 //                            Pose pose1 = arSceneView.getArFrame().getAndroidSensorPose();
@@ -261,6 +312,24 @@ public class ArActivity extends AppCompatActivity {
             }
         });
 
+        return base;
+    }
+
+    private Node getArrow() {
+        Node base = new Node();
+        base.setName("arrow");
+        base.setRenderable(arrowRenderable);
+        // Make sure the longest edge fits inside the image.
+        Vector3 mazeSizes = base.getWorldScale();
+        base.setLocalPosition(Vector3.zero());
+//        base.setLocalScale(new Vector3(mazeSizes.x * 0.003f, mazeSizes.y * 0.001f, mazeSizes.z * 0.003f));
+        base.setLocalRotation(Quaternion.axisAngle(new Vector3(1f, 0f, 0f), 30f));
+        Context c = this;
+        base.setOnTapListener((v, event) -> {
+            Toast.makeText(
+                    c, "Arrow touched.", Toast.LENGTH_LONG)
+                    .show();
+        });
         return base;
     }
 

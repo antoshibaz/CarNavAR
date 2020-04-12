@@ -69,6 +69,11 @@ public class NavMapFragment extends Fragment {
         mapView = view.findViewById(R.id.navMapView);
         mapView.onCreate(savedInstanceState);
         navMap = new NavMap(mapView, getString(R.string.mapbox_map_style_streets));
+        navMap.setDestinationMarkerChangedListener((newDstPoint, pointFeatures) -> {
+            navMap.moveCamera(newDstPoint);
+            showSelectedPlaceDetails(pointFeatures);
+            navMap.updateRoutesFromMyLocationTo(newDstPoint);
+        });
 
         bottomSheet = view.findViewById(R.id.mapbox_plugins_picker_bottom_sheet);
         bottomSheet.setBottomSheetCallback(new BottomSheetBehavior.BottomSheetCallback() {
@@ -105,10 +110,9 @@ public class NavMapFragment extends Fragment {
         });
 
         userLocationBtn = view.findViewById(R.id.fab_mylocation);
-        userLocationBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-            }
+        userLocationBtn.setOnClickListener(v -> {
+            navMap.trackingMyLocation();
+            bottomSheet.dismissPlaceDetails();
         });
 
         placeSelectedBtn = view.findViewById(R.id.fab_place_chosen);
@@ -146,8 +150,6 @@ public class NavMapFragment extends Fragment {
         if (resultCode == Activity.RESULT_OK && requestCode == 0) {
             CarmenFeature selectedCarmenFeature = PlaceAutocomplete.getPlace(data);
             navMap.replaceMarker(selectedCarmenFeature);
-            navMap.moveCamera((Point) selectedCarmenFeature.geometry());
-            showSelectedPlaceDetails(selectedCarmenFeature);
         }
     }
 
