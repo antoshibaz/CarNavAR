@@ -145,5 +145,4 @@ public class LocationMarker {
         GRADUAL_TO_MAX_RENDER_DISTANCE,
         GRADUAL_FIXED_SIZE
     }
-
 }

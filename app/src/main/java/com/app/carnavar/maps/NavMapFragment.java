@@ -3,7 +3,9 @@ package com.app.carnavar.maps;
 import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Color;
+import android.location.Location;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -11,6 +13,9 @@ import android.widget.Toast;
 
 import com.app.carnavar.ArActivity;
 import com.app.carnavar.R;
+import com.app.carnavar.services.ServicesRepository;
+import com.app.carnavar.services.gpsimu.GpsImuService;
+import com.app.carnavar.services.gpsimu.GpsImuServiceInterfaces;
 import com.app.carnavar.ui.NavMapBottomSheet;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
@@ -42,6 +47,15 @@ public class NavMapFragment extends Fragment {
     private FloatingActionButton locationsSearchFab;
     private FloatingActionButton fabArNav;
 
+    private GpsImuServiceInterfaces.GpsLocationListener gpsLocationListener = new GpsImuServiceInterfaces.GpsLocationListener() {
+        @Override
+        public void onGpsLocationReturned(Location location) {
+            if (navMap != null) {
+                navMap.updateLocation(location);
+            }
+        }
+    };
+
     public NavMapFragment() {
     }
 
@@ -69,11 +83,18 @@ public class NavMapFragment extends Fragment {
         mapView = view.findViewById(R.id.navMapView);
         mapView.onCreate(savedInstanceState);
         navMap = new NavMap(mapView, getString(R.string.mapbox_map_style_streets));
+        navMap.setNavMapInitializedListener(new NavMap.NavMapInitializedListener() {
+            @Override
+            public void onSuccess() {
+                Log.d(TAG, "NavMap is success loaded");
+            }
+        });
         navMap.setDestinationMarkerChangedListener((newDstPoint, pointFeatures) -> {
-            navMap.moveCamera(newDstPoint);
+            navMap.moveCamera(newDstPoint, 3000);
             showSelectedPlaceDetails(pointFeatures);
             navMap.updateRoutesFromMyLocationTo(newDstPoint);
         });
+        navMap.setUpdateRoutesListener((currentTargetRoute, currentAvailableRoutes) -> navMap.showRouteOverview(currentTargetRoute));
 
         bottomSheet = view.findViewById(R.id.mapbox_plugins_picker_bottom_sheet);
         bottomSheet.setBottomSheetCallback(new BottomSheetBehavior.BottomSheetCallback() {
@@ -174,11 +195,17 @@ public class NavMapFragment extends Fragment {
     public void onResume() {
         super.onResume();
         mapView.onResume();
+        ServicesRepository.getInstance().getServiceAsync(GpsImuService.class, serviceInstance -> {
+            serviceInstance.registerGpsLocationListener(gpsLocationListener);
+        }, 200);
     }
 
     @Override
     public void onPause() {
         super.onPause();
+        ServicesRepository.getInstance().getService(GpsImuService.class, serviceInstance -> {
+            serviceInstance.unregisterGpsLocationListener(gpsLocationListener);
+        });
         mapView.onPause();
     }
 

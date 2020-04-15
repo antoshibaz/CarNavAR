@@ -54,12 +54,14 @@ public class GpsImuService extends Service {
     public void registerGpsLocationListener(GpsLocationListener gpsLocationListener) {
         if (!gpsLocationListenerList.contains(gpsLocationListener)) {
             gpsLocationListenerList.add(gpsLocationListener);
+            Log.d(TAG, gpsLocationListener.toString() + " is registered");
         }
     }
 
     public void unregisterGpsLocationListener(GpsLocationListener gpsLocationListener) {
         if (gpsLocationListenerList.size() > 0) {
             gpsLocationListenerList.remove(gpsLocationListener);
+            Log.d(TAG, gpsLocationListener.toString() + " is unregistered");
         }
     }
 
@@ -70,11 +72,9 @@ public class GpsImuService extends Service {
     }
 
     public void retrieveCallingLastGpsLocation(GpsLocationListener gpsLocationListener) {
-        if (gpsLocationListenerList.contains(gpsLocationListener)) {
-            Location lastLoc = gpsImuFusionLocationThread.getLastLocation();
-            if (lastLoc != null) {
-                gpsLocationListener.onGpsLocationReturned(gpsImuFusionLocationThread.getLastLocation());
-            }
+        Location lastLoc = gpsImuFusionLocationThread.getLastLocation();
+        if (lastLoc != null) {
+            gpsLocationListener.onGpsLocationReturned(gpsImuFusionLocationThread.getLastLocation());
         }
     }
 

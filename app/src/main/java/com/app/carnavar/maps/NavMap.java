@@ -6,9 +6,6 @@ import android.location.Location;
 import android.util.Log;
 import android.widget.Toast;
 
-import com.app.carnavar.services.ServicesRepository;
-import com.app.carnavar.services.gpsimu.GpsImuService;
-import com.app.carnavar.services.gpsimu.GpsImuServiceInterfaces;
 import com.app.carnavar.utils.android.ThemeUtils;
 import com.mapbox.android.core.location.LocationEngine;
 import com.mapbox.android.core.location.LocationEngineCallback;
@@ -17,6 +14,8 @@ import com.mapbox.android.core.location.LocationEngineRequest;
 import com.mapbox.android.core.location.LocationEngineResult;
 import com.mapbox.api.directions.v5.models.DirectionsResponse;
 import com.mapbox.api.directions.v5.models.DirectionsRoute;
+import com.mapbox.api.directions.v5.models.LegStep;
+import com.mapbox.api.directions.v5.models.RouteLeg;
 import com.mapbox.api.geocoding.v5.models.CarmenFeature;
 import com.mapbox.core.constants.Constants;
 import com.mapbox.geojson.LineString;
@@ -38,6 +37,8 @@ import com.mapbox.mapboxsdk.maps.Style;
 import com.mapbox.mapboxsdk.plugins.annotation.SymbolManager;
 import com.mapbox.mapboxsdk.plugins.annotation.SymbolOptions;
 import com.mapbox.mapboxsdk.plugins.building.BuildingPlugin;
+import com.mapbox.navigator.BannerInstruction;
+import com.mapbox.navigator.VoiceInstruction;
 import com.mapbox.services.android.navigation.ui.v5.camera.CameraUpdateMode;
 import com.mapbox.services.android.navigation.ui.v5.camera.NavigationCamera;
 import com.mapbox.services.android.navigation.ui.v5.camera.NavigationCameraUpdate;
@@ -47,6 +48,7 @@ import com.mapbox.services.android.navigation.v5.navigation.MapboxNavigation;
 import com.mapbox.services.android.navigation.v5.navigation.MapboxNavigationOptions;
 import com.mapbox.services.android.navigation.v5.navigation.NavigationRoute;
 import com.mapbox.services.android.navigation.v5.offroute.OffRouteListener;
+import com.mapbox.services.android.navigation.v5.routeprogress.RouteLegProgress;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -63,6 +65,7 @@ public class NavMap {
     private MapView mapView;
     private MapboxMap map;
     //private NavigationMapboxMap navigationMapboxMap;
+    //NavigationView
     private MapboxNavigation navigation;
 
     private NavMapMarkerManager markerManager;
@@ -73,16 +76,15 @@ public class NavMap {
     private NavigationCamera mapCamera;
     private NavigationMapRoute mapRoute;
 
-    private DirectionsRoute currentRoute;
+    private DirectionsRoute currentTargetRoute;
 
     private Location lastLocation;
     private Point currentDestinationPoint;
 
-    private GpsImuServiceInterfaces.GpsLocationListener gpsLocationListener = this::updateLocation;
-
     private NavMapInitializedListener navMapInitializedListener;
     private List<DirectionsRoute> currentAvailableRoutes;
     private DestinationMarkerChangedListener destinationMarkerChangedListener;
+    private UpdateRoutesListener updateRoutesListener;
 
     public interface NavMapInitializedListener {
         void onSuccess();
@@ -100,20 +102,39 @@ public class NavMap {
         this.destinationMarkerChangedListener = destinationMarkerChangedListener;
     }
 
+    public interface UpdateRoutesListener {
+        void onRoutesUpdated(DirectionsRoute currentTargetRoute, List<DirectionsRoute> currentAvailableRoutes);
+    }
+
+    public void setUpdateRoutesListener(UpdateRoutesListener updateRoutesListener) {
+        this.updateRoutesListener = updateRoutesListener;
+    }
+
+    /**
+     * Can be used to automatically drive the map camera / route updates and arrow
+     * once navigation has started.
+     * <p>
+     * These will automatically be removed in {@link MapboxNavigation#onDestroy()}.
+     */
+    public void setProgressChangeListener() {
+        mapRoute.addProgressChangeListener(navigation);
+        mapCamera.addProgressChangeListener(navigation);
+    }
+
     public NavMap(MapView mapView, String styleUri) {
         this.mapView = mapView;
         this.mapView.getMapAsync(mapboxMap -> {
             map = mapboxMap;
             map.setStyle(new Style.Builder().fromUri(styleUri), style -> {
                 //mapView.setMaximumFps(60);
+                initLocation(mapView, map);
+//                initLocationEngine(mapView);
+
                 map.setCameraPosition(new CameraPosition.Builder()
                         .zoom(16f)
                         .tilt(45f)
                         .padding(0, (int) (map.getHeight() - map.getHeight() * 0.3), 0, 0)
                         .build());
-
-                initLocation(mapView, map);
-//                initLocationEngine(mapView);
 
                 initNavigation();
                 initNavMapRoute(navigation, mapView, map);
@@ -129,16 +150,9 @@ public class NavMap {
                 buildingPlugin.setMinZoomLevel(10.0f);
                 buildingPlugin.setOpacity(0.4f);
 
-                ServicesRepository.getInstance().getService(GpsImuService.class, serviceInstance -> {
-                    serviceInstance.registerGpsLocationListener(gpsLocationListener);
-                });
-
                 if (navMapInitializedListener != null) {
                     navMapInitializedListener.onSuccess();
                 }
-
-//                locationComponent.setRenderMode(RenderMode.GPS);
-//                locationComponent.setCameraMode(CameraMode.TRACKING);
             });
         });
     }
@@ -147,14 +161,10 @@ public class NavMap {
         return currentDestinationPoint;
     }
 
-    public void addMarker(CarmenFeature carmenFeature) {
-        Point point = (Point) carmenFeature.geometry();
-        addMarker(point);
-    }
-
     public void replaceMarker(CarmenFeature carmenFeature) {
         clearMarkers();
-        addMarker(carmenFeature);
+        currentDestinationPoint = (Point) carmenFeature.geometry();
+        addMarker(currentDestinationPoint);
         if (destinationMarkerChangedListener != null) {
             destinationMarkerChangedListener.onDstMarkerChanged((Point) carmenFeature.geometry(),
                     carmenFeature);
@@ -163,7 +173,8 @@ public class NavMap {
 
     public void replaceMarker(Point point) {
         clearMarkers();
-        addMarker(point);
+        currentDestinationPoint = point;
+        addMarker(currentDestinationPoint);
         if (destinationMarkerChangedListener != null) {
             destinationMarkerChangedListener.onDstMarkerChanged(point, null);
         }
@@ -203,16 +214,16 @@ public class NavMap {
         markerManager.removeAllMarkerSymbols();
     }
 
-    public void moveCamera(Point point) {
+    public void moveCamera(Point point, int duration) {
         CameraUpdate cameraPosition = CameraUpdateFactory.newCameraPosition(
                 new CameraPosition.Builder()
                         .target(new LatLng(point.latitude(), point.longitude()))
-                        .zoom(16)
+                        .zoom(16f)
                         .padding(new double[]{0, 0, 0, 0})
                         .build());
         NavigationCameraUpdate cameraUpdate = new NavigationCameraUpdate(cameraPosition);
         cameraUpdate.setMode(CameraUpdateMode.OVERRIDE);
-        mapCamera.update(cameraUpdate, 4000);
+        mapCamera.update(cameraUpdate, duration);
     }
 
     private void initLocation(MapView mapView, MapboxMap mapboxMap) {
@@ -246,6 +257,24 @@ public class NavMap {
                         .isDebugLoggingEnabled(true)
                         .build(),
                 locationEngine);
+        navigation.addProgressChangeListener((location, routeProgress) -> {
+            RouteLeg routeLeg = routeProgress.currentLeg();
+            List<LegStep> listSteps = routeLeg.steps();
+            RouteLegProgress routeLegProgress = routeProgress.currentLegProgress();
+            String routeProgressStr = String.format("TraveledDist:%s RemainingDist:%s TimeRemaining:%s Completed:%s " +
+                            "TotalDist:%s TotalTime:%s RemainingLegs:%s CurrLeg:%s",
+                    routeProgress.distanceTraveled(),
+                    routeProgress.distanceRemaining(),
+                    routeProgress.durationRemaining(),
+                    routeProgress.fractionTraveled(),
+                    routeProgress.directionsRoute().distance(),
+                    routeProgress.directionsRoute().duration(),
+                    routeProgress.remainingWaypoints(),
+                    routeProgress.legIndex());
+
+            BannerInstruction bannerInstruction = routeProgress.bannerInstruction();
+            VoiceInstruction voiceInstruction = routeProgress.voiceInstruction();
+        });
     }
 
     private void initNavMapCamera(MapboxMap mapboxMap, MapboxNavigation mapboxNavigation, LocationComponent locationComponent) {
@@ -267,28 +296,41 @@ public class NavMap {
     }
 
     public void updateLocation(Location location) {
-        locationComponent.forceLocationUpdate(location);
-        lastLocation = location;
+        if (locationComponent != null) {
+            locationComponent.forceLocationUpdate(location);
+            lastLocation = location;
+        }
+    }
+
+    public Location getLastLocation() {
+        return locationComponent.getLastKnownLocation();
     }
 
     public void trackingMyLocation() {
-        CameraUpdate cameraUpdate = CameraUpdateFactory.newCameraPosition(new CameraPosition.Builder()
-                .zoom(16f)
-                .tilt(45f)
-                .padding(0, (int) (map.getHeight() - map.getHeight() * 0.3), 0, 0)
-                .build());
-        map.animateCamera(cameraUpdate, 1000,
-                new MapboxMap.CancelableCallback() {
-                    @Override
-                    public void onCancel() {
-                    }
+        if (locationComponent.getLastKnownLocation() != null) {
+            CameraUpdate cameraPosition = CameraUpdateFactory.newCameraPosition(
+                    new CameraPosition.Builder()
+                            .target(new LatLng(locationComponent.getLastKnownLocation()))
+                            .tilt(45)
+                            .zoom(16f)
+                            .padding(new double[]{0, (int) (map.getHeight() - map.getHeight() * 0.3), 0, 0})
+                            .bearing(locationComponent.getLastKnownLocation().getBearing())
+                            .build());
+            NavigationCameraUpdate cameraUpdate = new NavigationCameraUpdate(cameraPosition);
+            cameraUpdate.setMode(CameraUpdateMode.OVERRIDE);
+            mapCamera.update(cameraUpdate, 2000, new MapboxMap.CancelableCallback() {
+                @Override
+                public void onCancel() {
 
-                    @Override
-                    public void onFinish() {
-                        locationComponent.setCameraMode(CameraMode.TRACKING_GPS);
-                    }
                 }
-        );
+
+                @Override
+                public void onFinish() {
+                    locationComponent.setCameraMode(CameraMode.TRACKING_GPS);
+                    //mapCamera.updateCameraTrackingMode(NavigationCamera.NAVIGATION_TRACKING_MODE_GPS);
+                }
+            });
+        }
     }
 
     public void updateOrientation(float bearing) {
@@ -301,21 +343,23 @@ public class NavMap {
         }
     }
 
-    public void getRoutes(Point source, Point destination) {
+    public void getRoutes(Point source, Point destination, Callback<DirectionsResponse> directionsRouteCallback) {
         NavigationRoute.builder(mapView.getContext())
                 .accessToken(Mapbox.getAccessToken())
                 .origin(source) // + bearing and tolerance
                 .destination(destination)
                 .alternatives(true)
                 .build()
-                .getRoute(buildRoutesCallback);
+                .getRoute(directionsRouteCallback);
     }
 
     public void updateRoutesFromMyLocationTo(Point dst) {
-        Point srcPoint = Point.fromLngLat(locationComponent.getLastKnownLocation().getLongitude(),
-                locationComponent.getLastKnownLocation().getLatitude());
+        if (locationComponent.getLastKnownLocation() != null) {
+            Point srcPoint = Point.fromLngLat(locationComponent.getLastKnownLocation().getLongitude(),
+                    locationComponent.getLastKnownLocation().getLatitude());
 
-        getRoutes(srcPoint, dst);
+            getRoutes(srcPoint, dst, buildRoutesCallback);
+        }
     }
 
     public void drawRoute(DirectionsRoute route) {
@@ -326,7 +370,7 @@ public class NavMap {
         mapRoute.addRoutes(routes);
     }
 
-    public void showRoute(DirectionsRoute route) {
+    public void showRouteOverview(DirectionsRoute route) {
         mapCamera.updateCameraTrackingMode(NavigationCamera.NAVIGATION_TRACKING_MODE_NONE);
         List<Point> routePoints = overview(route);
         animateMapboxMapForRoute(new int[]{164, 164, 164, 164}, routePoints);
@@ -357,7 +401,6 @@ public class NavMap {
         final CameraUpdate overviewUpdate = CameraUpdateFactory.newLatLngBounds(
                 routeBounds, padding[0], padding[1], padding[2], padding[3]
         );
-
         map.animateCamera(resetUpdate, 250,
                 new MapboxMap.CancelableCallback() {
                     @Override
@@ -419,10 +462,6 @@ public class NavMap {
             locationEngine.removeLocationUpdates(locationEngineCallback);
         }
 
-        ServicesRepository.getInstance().getService(GpsImuService.class, serviceInstance -> {
-            serviceInstance.unregisterGpsLocationListener(gpsLocationListener);
-        });
-
         if (navigation != null) {
             navigation.onDestroy();
         }
@@ -449,8 +488,7 @@ public class NavMap {
                 return false;
             }
 
-            currentDestinationPoint = Point.fromLngLat(point.getLongitude(), point.getLatitude());
-            replaceMarker(currentDestinationPoint);
+            replaceMarker(Point.fromLngLat(point.getLongitude(), point.getLatitude()));
             return true;
         }
     };
@@ -462,10 +500,12 @@ public class NavMap {
                 return;
             }
 
-            currentRoute = response.body().routes().get(0);
+            currentTargetRoute = response.body().routes().get(0);
             currentAvailableRoutes = response.body().routes();
             drawRoutes(response.body().routes());
-            showRoute(currentRoute);
+            if (updateRoutesListener != null) {
+                updateRoutesListener.onRoutesUpdated(currentTargetRoute, currentAvailableRoutes);
+            }
         }
 
         @Override
@@ -477,13 +517,13 @@ public class NavMap {
 
     private void startNavigation() {
         navigation.stopNavigation();
-        navigation.startNavigation(currentRoute);
+        navigation.startNavigation(currentTargetRoute);
         mapCamera.updateCameraTrackingMode(NavigationCamera.NAVIGATION_TRACKING_MODE_GPS);
     }
 
     private void stopNavigation() {
         navigation.stopNavigation();
-        navigation.startNavigation(currentRoute);
+        navigation.startNavigation(currentTargetRoute);
     }
 
     private OffRouteListener offRouteListener = new OffRouteListener() {
@@ -491,7 +531,7 @@ public class NavMap {
         public void userOffRoute(Location location) {
             Point srcPoint = Point.fromLngLat(location.getLongitude(),
                     location.getLatitude());
-            getRoutes(srcPoint, currentDestinationPoint);
+            getRoutes(srcPoint, currentDestinationPoint, buildRoutesCallback);
         }
     };
 }

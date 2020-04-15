@@ -78,7 +78,9 @@ public class NavMapBottomSheet extends CoordinatorLayout {
     }
 
     public void dismissPlaceDetails() {
-        toggleBottomSheet();
+        if (isShowing()) {
+            toggleBottomSheet();
+        }
     }
 
     public boolean isShowing() {

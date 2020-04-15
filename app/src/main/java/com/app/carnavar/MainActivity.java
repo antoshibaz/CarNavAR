@@ -75,7 +75,6 @@ public class MainActivity extends AppCompatActivity {
         if (resultCode == Activity.RESULT_OK && requestCode == 0) {
             CarmenFeature selectedCarmenFeature = PlaceAutocomplete.getPlace(data);
             navMapFragment.getNavMap().replaceMarker(selectedCarmenFeature);
-            navMapFragment.getNavMap().moveCamera((Point) selectedCarmenFeature.geometry());
             navMapFragment.showSelectedPlaceDetails(selectedCarmenFeature);
         }
     }
