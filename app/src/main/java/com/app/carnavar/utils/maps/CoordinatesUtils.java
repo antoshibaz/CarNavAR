@@ -1,4 +1,4 @@
-package com.app.carnavar.utils;
+package com.app.carnavar.utils.maps;
 
 import android.location.Location;
 import android.opengl.Matrix;

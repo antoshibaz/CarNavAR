@@ -1,4 +1,4 @@
-package com.app.carnavar.utils;
+package com.app.carnavar.utils.android;
 
 import android.os.SystemClock;
 
@@ -11,15 +11,15 @@ public class TimeUtils {
     // nanoseconds to microseconds
     public static final double NS2MCS = 1.0f / 1000.0f;
 
-    public static long nano2sec(long nanoseconds) {
+    public static long nanos2sec(long nanoseconds) {
         return (long) (nanoseconds * NS2S);
     }
 
-    public static long nano2milli(long nanoseconds) {
+    public static long nanos2millis(long nanoseconds) {
         return (long) (nanoseconds * NS2MS);
     }
 
-    public static long nano2micro(long nanoseconds) {
+    public static long nanos2micros(long nanoseconds) {
         return (long) (nanoseconds * NS2MCS);
     }
 
@@ -28,15 +28,15 @@ public class TimeUtils {
     }
 
     public static long currentJavaSystemTimeMicros() {
-        return nano2micro(currentJavaSystemTimeNanos());
+        return nanos2micros(currentJavaSystemTimeNanos());
     }
 
     public static long currentJavaSystemTimeMillis() {
-        return nano2milli(currentJavaSystemTimeNanos());
+        return nanos2millis(currentJavaSystemTimeNanos());
     }
 
     public static long currentJavaSystemTimeSec() {
-        return nano2sec(currentJavaSystemTimeNanos());
+        return nanos2sec(currentJavaSystemTimeNanos());
     }
 
     public static long currentAndroidSystemTimeNanos() {
@@ -44,15 +44,15 @@ public class TimeUtils {
     }
 
     public static long currentAndroidSystemTimeMicros() {
-        return nano2micro(currentAndroidSystemTimeNanos());
+        return nanos2micros(currentAndroidSystemTimeNanos());
     }
 
     public static long currentAndroidSystemTimeMillis() {
-        return nano2milli(currentAndroidSystemTimeNanos());
+        return nanos2millis(currentAndroidSystemTimeNanos());
     }
 
     public static long currentAndroidSystemTimeSec() {
-        return nano2sec(currentAndroidSystemTimeNanos());
+        return nanos2sec(currentAndroidSystemTimeNanos());
     }
 
     public static long currentJavaSystemTimestampMillis() {

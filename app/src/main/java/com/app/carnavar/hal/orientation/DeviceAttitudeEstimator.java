@@ -15,9 +15,9 @@ import com.app.carnavar.hal.sensors.VirtualSensor;
 import java.util.Locale;
 
 // orientation estimator based on rotation vector (fusion accelerometer and magnetometer filtered data)
-public class DeviceOrientationEstimator extends VirtualSensor implements VirtualSensor.SensorListener {
+public class DeviceAttitudeEstimator extends VirtualSensor implements VirtualSensor.SensorListener {
 
-    public static final String TAG = DeviceOrientationEstimator.class.getSimpleName();
+    public static final String TAG = DeviceAttitudeEstimator.class.getSimpleName();
 
     private Accelerometer accelerometer;
     private Magnetometer magnetometer;
@@ -29,7 +29,7 @@ public class DeviceOrientationEstimator extends VirtualSensor implements Virtual
     private float[] orientationAngles = new float[3];
     private boolean useRotVec;
 
-    public DeviceOrientationEstimator(Context context, boolean useRotVec) {
+    public DeviceAttitudeEstimator(Context context, boolean useRotVec) {
         super();
         sensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
         windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
@@ -46,7 +46,7 @@ public class DeviceOrientationEstimator extends VirtualSensor implements Virtual
         }
     }
 
-    public DeviceOrientationEstimator(Context context, boolean useRotVec, Handler handler) {
+    public DeviceAttitudeEstimator(Context context, boolean useRotVec, Handler handler) {
         super(handler);
         sensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
         windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);

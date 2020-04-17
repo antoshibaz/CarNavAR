@@ -8,8 +8,8 @@ import android.hardware.SensorManager;
 import android.os.Handler;
 import android.view.WindowManager;
 
-import com.app.carnavar.hal.orientation.FusionDeviceOrientationEstimator;
-import com.app.carnavar.utils.TimeUtils;
+import com.app.carnavar.hal.orientation.FusionDeviceAttitudeEstimator;
+import com.app.carnavar.utils.android.TimeUtils;
 
 import java.util.Locale;
 
@@ -30,7 +30,7 @@ public class LinearAccelerometer extends VirtualSensor implements SensorEventLis
     private float[] linAcc = new float[]{0, 0, 0};
     private float[] eps = new float[]{0.002f, 0.002f, 0.002f}; // empirical
 
-    private FusionDeviceOrientationEstimator deviceOrientationEstimator;
+    private FusionDeviceAttitudeEstimator deviceOrientationEstimator;
     private float[] orientationAngles = new float[]{0, 0, 0};
     private float[] gravity2 = new float[]{0, 0, 0};
     private float[] linAcc2 = new float[]{0, 0, 0};
@@ -54,7 +54,7 @@ public class LinearAccelerometer extends VirtualSensor implements SensorEventLis
         windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
         rawValues = new float[3];
         sensor = sensorManager.getDefaultSensor(ALL_ACCELERATION);
-        deviceOrientationEstimator = new FusionDeviceOrientationEstimator(context, handler);
+        deviceOrientationEstimator = new FusionDeviceAttitudeEstimator(context, handler);
         deviceOrientationEstimator.addSensorValuesCaptureListener(this);
     }
 

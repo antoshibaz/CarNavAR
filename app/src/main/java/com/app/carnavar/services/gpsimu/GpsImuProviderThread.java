@@ -1,12 +1,13 @@
 package com.app.carnavar.services.gpsimu;
 
 import android.content.Context;
+import android.hardware.GeomagneticField;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Process;
 
 import com.app.carnavar.hal.location.AndroidGpsLocationEngine;
-import com.app.carnavar.hal.orientation.FusionImuKinematicEstimator;
+import com.app.carnavar.hal.motion.FusionImuMotionEstimator;
 import com.app.carnavar.services.gpsimu.GpsImuServiceInterfaces.GpsLocationListener;
 import com.app.carnavar.services.gpsimu.GpsImuServiceInterfaces.ImuListener;
 
@@ -16,7 +17,7 @@ public class GpsImuProviderThread extends HandlerThread {
 
     private Context context;
     private Handler handler;
-    private FusionImuKinematicEstimator fusionImuKinematicEstimator;
+    private FusionImuMotionEstimator fusionImuMotionEstimator;
     private AndroidGpsLocationEngine androidGpsLocationEngine;
 
     private ImuListener imuListener;
@@ -42,8 +43,8 @@ public class GpsImuProviderThread extends HandlerThread {
         return androidGpsLocationEngine;
     }
 
-    public FusionImuKinematicEstimator retrieveImuProvider() {
-        return fusionImuKinematicEstimator;
+    public FusionImuMotionEstimator retrieveImuProvider() {
+        return fusionImuMotionEstimator;
     }
 
     private GpsImuProviderThread(Context context, String name) {
@@ -57,8 +58,8 @@ public class GpsImuProviderThread extends HandlerThread {
     }
 
     private void shutdown() {
-        if (fusionImuKinematicEstimator != null) {
-            fusionImuKinematicEstimator.stop();
+        if (fusionImuMotionEstimator != null) {
+            fusionImuMotionEstimator.stop();
             this.imuListener = null;
 
         }
@@ -102,11 +103,11 @@ public class GpsImuProviderThread extends HandlerThread {
         gpsImuProviderThread.start();
         gpsImuProviderThread.handler = new Handler(gpsImuProviderThread.getLooper());
         gpsImuProviderThread.handler.post(() -> {
-            gpsImuProviderThread.fusionImuKinematicEstimator = new FusionImuKinematicEstimator(
+            gpsImuProviderThread.fusionImuMotionEstimator = new FusionImuMotionEstimator(
                     gpsImuProviderThread.context,
                     gpsImuProviderThread.handler
             );
-            gpsImuProviderThread.fusionImuKinematicEstimator.addSensorValuesCaptureListener((values, sensorType, timeNanos) -> {
+            gpsImuProviderThread.fusionImuMotionEstimator.addSensorValuesCaptureListener((values, sensorType, timeNanos) -> {
                 if (gpsImuProviderThread.imuListener != null) {
                     gpsImuProviderThread.imuListener.onImuReturned(values, sensorType, timeNanos);
                 }
@@ -117,12 +118,18 @@ public class GpsImuProviderThread extends HandlerThread {
                     gpsImuProviderThread.handler
             );
             gpsImuProviderThread.androidGpsLocationEngine.addGpsLocationUpdateListener(location -> {
+                gpsImuProviderThread.fusionImuMotionEstimator.setGeomagneticField(new GeomagneticField(
+                        (float) location.getLatitude(),
+                        (float) location.getLongitude(),
+                        (float) location.getAltitude(),
+                        location.getTime()));
+
                 if (gpsImuProviderThread.gpsLocationListener != null) {
                     gpsImuProviderThread.gpsLocationListener.onGpsLocationReturned(location);
                 }
             });
 
-            gpsImuProviderThread.fusionImuKinematicEstimator.start();
+            gpsImuProviderThread.fusionImuMotionEstimator.start();
             gpsImuProviderThread.androidGpsLocationEngine.start();
         });
     }

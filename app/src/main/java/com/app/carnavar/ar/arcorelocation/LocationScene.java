@@ -6,17 +6,12 @@ import android.os.Handler;
 import android.util.Log;
 
 import com.app.carnavar.ar.arcorelocation.rendering.LocationNode;
-import com.app.carnavar.ar.arcorelocation.sensor.DeviceLocation;
-import com.app.carnavar.ar.arcorelocation.sensor.DeviceLocationChanged;
-import com.app.carnavar.ar.arcorelocation.sensor.DeviceOrientation;
-import com.app.carnavar.ar.arcorelocation.utils.LocationUtils;
+import com.app.carnavar.utils.maps.MapsUtils;
 import com.google.ar.core.Anchor;
 import com.google.ar.core.Frame;
 import com.google.ar.core.Pose;
 import com.google.ar.core.Session;
 import com.google.ar.sceneform.ArSceneView;
-import com.google.ar.sceneform.Node;
-import com.google.ar.sceneform.math.Quaternion;
 import com.google.ar.sceneform.math.Vector3;
 
 import java.util.ArrayList;
@@ -52,7 +47,6 @@ public class LocationScene {
     };
     private boolean debugEnabled = false;
     private Session mSession;
-    private DeviceLocationChanged locationChangedEvent;
 
     private Location currentLocation = null;
     private double currentBearing = 0.0f;
@@ -78,16 +72,6 @@ public class LocationScene {
 
     public double getCurrentBearing() {
         return currentBearing;
-    }
-
-    private void test() {
-
-        float bearing = (float) LocationUtils.bearing(
-                48.31244200607186,
-                2.1290194140624408,
-                48.33577350525661,
-                2.073057805175722);
-        Log.d("brako", "OKKKKKK " + bearing);
     }
 
     public boolean isDebugEnabled() {
@@ -118,24 +102,6 @@ public class LocationScene {
         }
         refreshAnchors();
         this.refreshAnchorsAsLocationChanges = refreshAnchorsAsLocationChanges;
-    }
-
-    /**
-     * Get additional event to run as device location changes.
-     * Save creating extra sensor classes
-     *
-     * @return
-     */
-    public DeviceLocationChanged getLocationChangedEvent() {
-        return locationChangedEvent;
-    }
-
-    /**
-     * Set additional event to run as device location changes.
-     * Save creating extra sensor classes
-     */
-    public void setLocationChangedEvent(DeviceLocationChanged locationChangedEvent) {
-        this.locationChangedEvent = locationChangedEvent;
     }
 
     public int getAnchorRefreshInterval() {
@@ -247,12 +213,12 @@ public class LocationScene {
             try {
                 final LocationMarker marker = mLocationMarkers.get(i);
                 int markerDistance = (int) Math.round(
-                        LocationUtils.distance(
+                        MapsUtils.haversineDistance3d(
                                 marker.latitude,
-                                currentLocation.getLatitude(),
                                 marker.longitude,
-                                currentLocation.getLongitude(),
                                 0,
+                                currentLocation.getLatitude(),
+                                currentLocation.getLongitude(),
                                 0)
                 );
 
@@ -263,7 +229,7 @@ public class LocationScene {
                     continue;
                 }
 
-                float bearing = (float) LocationUtils.bearing(
+                float bearing = (float) MapsUtils.calcBearing(
                         currentLocation.getLatitude(),
                         currentLocation.getLongitude(),
                         marker.latitude,
@@ -278,9 +244,9 @@ public class LocationScene {
 
                 double rotation = Math.floor(markerBearing);
 
-                Log.d(TAG, "currentDegree " + (float) currentBearing
-                        + " bearing " + bearing + " markerBearing " + markerBearing
-                        + " rotation " + rotation + " distance " + markerDistance);
+                Log.d(TAG, "currentDeviceBearing:" + (float) currentBearing
+                        + " bearingMyLocationToMarker:" + bearing + " markerBearing:" + markerBearing
+                        + " rotation:" + rotation + " distanceMuLocationToMarker:" + markerDistance);
 
                 // When pointing device upwards (camera towards sky)
                 // the compass bearing can flip.

@@ -17,9 +17,9 @@ import com.app.carnavar.utils.math.Quaternion;
 import java.util.Locale;
 
 // orientation estimator based on rotation vector (fusion accelerometer and magnetometer filtered data) and gyroscope data fusion
-public class FusionDeviceOrientationEstimator extends VirtualSensor implements VirtualSensor.SensorListener {
+public class FusionDeviceAttitudeEstimator extends VirtualSensor implements VirtualSensor.SensorListener {
 
-    public static final String TAG = FusionDeviceOrientationEstimator.class.getSimpleName();
+    public static final String TAG = FusionDeviceAttitudeEstimator.class.getSimpleName();
 
     private RotationVector rotationVector;
     private Gyroscope gyroscope;
@@ -29,7 +29,7 @@ public class FusionDeviceOrientationEstimator extends VirtualSensor implements V
 
     private float[] orientationAngles = new float[3];
 
-    public FusionDeviceOrientationEstimator(Context context) {
+    public FusionDeviceAttitudeEstimator(Context context) {
         super();
         sensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
         windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
@@ -39,7 +39,7 @@ public class FusionDeviceOrientationEstimator extends VirtualSensor implements V
         gyroscope.addSensorValuesCaptureListener(this);
     }
 
-    public FusionDeviceOrientationEstimator(Context context, Handler handler) {
+    public FusionDeviceAttitudeEstimator(Context context, Handler handler) {
         super(handler);
         sensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
         windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);

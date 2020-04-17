@@ -1,7 +1,6 @@
 package com.app.carnavar.services.gpsimu;
 
 import android.content.Context;
-import android.hardware.GeomagneticField;
 import android.location.Location;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -10,20 +9,20 @@ import android.util.Log;
 
 import com.app.carnavar.hal.location.KalmanGpsImuFusionEngine;
 import com.app.carnavar.services.gpsimu.GpsImuServiceInterfaces.GpsLocationListener;
-import com.app.carnavar.utils.MapsUtils;
-import com.app.carnavar.utils.TimeUtils;
+import com.app.carnavar.utils.android.TimeUtils;
+import com.app.carnavar.utils.maps.MapsUtils;
 
 public class GpsImuFusionLocationThread extends HandlerThread {
 
     public static final String TAG = GpsImuFusionLocationThread.class.getSimpleName();
+
+    private static boolean useGpsSpeed = false;
 
     private Context context;
     private Handler handler;
 
     private KalmanGpsImuFusionEngine kalmanGpsImuFusionEngine;
     private boolean isInitialized = false;
-    private double lastMagneticDeclination = 0;
-    private boolean useMagneticDeclinationCorrection = true;
 
     private Location lastLocation = null;
 
@@ -62,7 +61,7 @@ public class GpsImuFusionLocationThread extends HandlerThread {
             double xVel = speed * Math.cos(bearing);
             double yVel = speed * Math.sin(bearing);
             double posVar = location.getAccuracy();
-            long timeMillis = TimeUtils.nano2milli(location.getElapsedRealtimeNanos());
+            long timeMillis = TimeUtils.nanos2millis(location.getElapsedRealtimeNanos());
             kalmanGpsImuFusionEngine.init(x, y, xVel, yVel, posVar, timeMillis);
             isInitialized = true;
         });
@@ -70,19 +69,8 @@ public class GpsImuFusionLocationThread extends HandlerThread {
 
     public void postPredictTask(double xAcceleration, double yAcceleration, long timeMillis) { // xAcc-east, yAcc-north
         handler.post(() -> {
-            // TODO: magDec+useGpsSpeed not works correctly together -> fix it
-            if (useMagneticDeclinationCorrection
-                    && !kalmanGpsImuFusionEngine.getKalmanOptions().isUseGpsSpeed()) {
-                if (lastMagneticDeclination != 0) {
-                    // correcting accelerations by magnetic declination
-                    double xCorrAcc = xAcceleration * Math.cos(lastMagneticDeclination) - yAcceleration * Math.sin(lastMagneticDeclination);
-                    double yCorrAcc = yAcceleration * Math.cos(lastMagneticDeclination) + xAcceleration * Math.sin(lastMagneticDeclination);
-                    kalmanGpsImuFusionEngine.predict(xCorrAcc, yCorrAcc, timeMillis);
-                }
-            } else {
-                //Log.d(TAG, "predict " + xAcceleration + " " + yAcceleration + " " + timeMillis);
-                kalmanGpsImuFusionEngine.predict(xAcceleration, yAcceleration, timeMillis);
-            }
+//            Log.d(TAG, "predict " + xAcceleration + " " + yAcceleration + " " + timeMillis);
+            kalmanGpsImuFusionEngine.predict(xAcceleration, yAcceleration, timeMillis);
         });
     }
 
@@ -101,15 +89,8 @@ public class GpsImuFusionLocationThread extends HandlerThread {
             } else {
                 velVar = posVar * 0.1f;
             }
-            long timeMillis = TimeUtils.nano2milli(location.getElapsedRealtimeNanos());
-            GeomagneticField f = new GeomagneticField(
-                    (float) location.getLatitude(),
-                    (float) location.getLongitude(),
-                    (float) location.getAltitude(),
-                    timeMillis);
-            lastMagneticDeclination = f.getDeclination();
-            Log.d(TAG, "mag declination=" + lastMagneticDeclination);
-            //Log.d(TAG, "pre update " + x + " " + y + " " + speed + " " + " " + bearing + " " + xVel + " " + yVel + " " + velVar + " " + timeMillis);
+            long timeMillis = TimeUtils.nanos2millis(location.getElapsedRealtimeNanos());
+            //Log.d(TAG, "update " + x + " " + y + " " + speed + " " + " " + bearing + " " + xVel + " " + yVel + " " + velVar + " " + timeMillis);
             kalmanGpsImuFusionEngine.update(x, y, xVel, yVel, posVar, velVar, timeMillis);
             Location newLocation = createLocationAfterUpdate(location);
 
@@ -117,9 +98,11 @@ public class GpsImuFusionLocationThread extends HandlerThread {
             // TODO: fix problem with filter NAN -> abs acceleration sometimes is NAN
             if (!Double.isNaN(newLocation.getLongitude()) || !Double.isNaN(newLocation.getLatitude()) ||
                     !Double.isNaN(newLocation.getSpeed())) {
-                lastLocation = newLocation;
-                if (gpsLocationListener != null) {
-                    gpsLocationListener.onGpsLocationReturned(newLocation);
+                if (newLocation.getLatitude() != 0 && newLocation.getLongitude() != 0) {
+                    lastLocation = newLocation;
+                    if (gpsLocationListener != null) {
+                        gpsLocationListener.onGpsLocationReturned(newLocation);
+                    }
                 }
             } else {
                 Log.e(TAG, "Kalman is NAN. Reset it!");
@@ -141,9 +124,14 @@ public class GpsImuFusionLocationThread extends HandlerThread {
         newLocation.setLatitude(loc[0]);
         newLocation.setLongitude(loc[1]);
         newLocation.setAltitude(rawLocation.getAltitude());
-        double xVel = kalmanGpsImuFusionEngine.getCurrentXVel();
-        double yVel = kalmanGpsImuFusionEngine.getCurrentYVel();
-        double speed = Math.sqrt(xVel * xVel + yVel * yVel); //scalar speed without bearing
+        double speed;
+        if (kalmanGpsImuFusionEngine.getKalmanOptions().isUseGpsSpeed()) {
+            double xVel = kalmanGpsImuFusionEngine.getCurrentXVel();
+            double yVel = kalmanGpsImuFusionEngine.getCurrentYVel();
+            speed = Math.sqrt(xVel * xVel + yVel * yVel); //scalar speed without bearing
+        } else {
+            speed = rawLocation.getSpeed();
+        }
         newLocation.setSpeed((float) speed);
         newLocation.setBearing(rawLocation.getBearing());
         newLocation.setTime(TimeUtils.currentJavaSystemTimestampMillis());
@@ -177,7 +165,7 @@ public class GpsImuFusionLocationThread extends HandlerThread {
         gpsImuFusionLocationThread.handler = new Handler(gpsImuFusionLocationThread.getLooper());
         gpsImuFusionLocationThread.handler.post(() -> {
             gpsImuFusionLocationThread.kalmanGpsImuFusionEngine = new KalmanGpsImuFusionEngine(KalmanGpsImuFusionEngine.KalmanOptions.Options()
-                    .useGpsSpeed(true)
+                    .useGpsSpeed(useGpsSpeed) // TODO: with useGpsSpeed=true sometimes gives location incorrectly -> fix it
                     .setAccelerationDeviance(0.1f)
                     .setPositionVarianceMulFactor(1.0f)
                     .setVelocityVarianceMulFactor(1.0f)

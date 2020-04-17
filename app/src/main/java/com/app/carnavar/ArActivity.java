@@ -20,6 +20,7 @@ import com.app.carnavar.services.gpsimu.GpsImuServiceInterfaces;
 import com.app.carnavar.utils.android.DisplayMessagesUtils;
 import com.app.carnavar.utils.android.DisplayUtils;
 import com.app.carnavar.utils.android.LibsUtils;
+import com.app.carnavar.utils.filters.SmoothingFilters;
 import com.google.ar.core.Frame;
 import com.google.ar.core.Session;
 import com.google.ar.core.SharedCamera;
@@ -70,15 +71,21 @@ public class ArActivity extends AppCompatActivity {
 
     private LocationMarker targetDestinationMarker;
 
+    private SmoothingFilters.LowPassFilter poseFilter;
+    private static final double POSE_FILTERING_FACTOR = 0.6;
+
+    private float[] currentPoseAngles;
+
     private GpsImuServiceInterfaces.ImuListener imuListener = (values, sensorType, timeNanos) -> {
         if (sensorType == SensorTypes.ORIENTATION_ROTATION_ANGLES) {
+            currentPoseAngles = poseFilter.processArray(values, (float) POSE_FILTERING_FACTOR);
             if (navMap != null && navMapInitSuccess) {
-                navMap.updateOrientation(values[0]);
+                navMap.updateOrientation(currentPoseAngles[0]);
             }
             if (locationScene != null) {
-                locationScene.updateBearing(values[0]);
+                locationScene.updateBearing(currentPoseAngles[0]);
             }
-            Log.d(TAG, " bearing=" + values[0]);
+            Log.d(TAG, " bearing=" + currentPoseAngles[0]);
         }
     };
 
@@ -114,6 +121,7 @@ public class ArActivity extends AppCompatActivity {
         }
 
         setContentView(R.layout.activity_ar);
+        poseFilter = new SmoothingFilters.LowPassFilter();
 
         // create arcore scene view and custom session
         arSceneView = findViewById(R.id.ar_scene_view);
@@ -173,7 +181,7 @@ public class ArActivity extends AppCompatActivity {
                 }
             }
         });
-        navMap.setUpdateRoutesListener((currentTargetRoute, currentAvailableRoutes) -> navMap.trackingMyLocation());
+        navMap.setUpdateRoutesListener((currentTargetRoute, currentAvailableRoutes) -> navMap.trackingMyLocation(250));
 
         // Build a renderable from a 2D View
         CompletableFuture<ViewRenderable> poiLayout =
@@ -207,6 +215,7 @@ public class ArActivity extends AppCompatActivity {
                             return null;
                         });
 
+        arSceneView.getPlaneRenderer().setEnabled(false); // disable plane renderer as it not use in this scenario
         // Set an update listener on the Scene
         arSceneView
                 .getScene()
@@ -251,7 +260,7 @@ public class ArActivity extends AppCompatActivity {
 
                             // image analysis
                             try (Image image = frame.acquireCameraImage()) {
-                                Log.d(TAG, "" + image.getHeight() + "x" + image.getWidth());
+//                                Log.d(TAG, "" + image.getHeight() + "x" + image.getWidth());
                             } catch (NotYetAvailableException e) {
                             }
 

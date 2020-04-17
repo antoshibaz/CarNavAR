@@ -27,6 +27,7 @@ import com.mapbox.mapboxsdk.maps.MapView;
 import com.mapbox.mapboxsdk.plugins.places.autocomplete.PlaceAutocomplete;
 import com.mapbox.mapboxsdk.plugins.places.autocomplete.model.PlaceOptions;
 
+import java.util.Arrays;
 import java.util.Locale;
 
 import androidx.annotation.NonNull;
@@ -94,7 +95,10 @@ public class NavMapFragment extends Fragment {
             showSelectedPlaceDetails(pointFeatures);
             navMap.updateRoutesFromMyLocationTo(newDstPoint);
         });
-        navMap.setUpdateRoutesListener((currentTargetRoute, currentAvailableRoutes) -> navMap.showRouteOverview(currentTargetRoute));
+        navMap.setUpdateRoutesListener((currentTargetRoute, currentAvailableRoutes) -> {
+            navMap.showRouteOverview(currentTargetRoute);
+            Log.d(TAG, Arrays.toString(NavMap.getRoutePoints(currentTargetRoute)));
+        });
 
         bottomSheet = view.findViewById(R.id.mapbox_plugins_picker_bottom_sheet);
         bottomSheet.setBottomSheetCallback(new BottomSheetBehavior.BottomSheetCallback() {
@@ -132,7 +136,7 @@ public class NavMapFragment extends Fragment {
 
         userLocationBtn = view.findViewById(R.id.fab_mylocation);
         userLocationBtn.setOnClickListener(v -> {
-            navMap.trackingMyLocation();
+            navMap.trackingMyLocation(2000);
             bottomSheet.dismissPlaceDetails();
         });
 
@@ -158,7 +162,7 @@ public class NavMapFragment extends Fragment {
         if (carmenFeature == null) {
             carmenFeature = CarmenFeature.builder().placeName(
                     String.format(Locale.US, "[%f, %f]",
-                            navMap.getCurrentDestinationPoint().latitude(),
+                            navMap.getCurrentDestinationPoint().longitude(),
                             navMap.getCurrentDestinationPoint().latitude())
             ).text("No address found").properties(new JsonObject()).build();
         }

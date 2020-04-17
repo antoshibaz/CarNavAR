@@ -9,4 +9,5 @@ public abstract class SensorTypes {
     public static final int MAGNETIC_FIELD = 5; // Mx, My, Mz
     public static final int ORIENTATION_ROTATION_VECTOR = 6; // rotation quaternion
     public static final int ORIENTATION_ROTATION_ANGLES = 7; // rotation euler angles: azimuth/yaw, pitch, roll
+    public static final int ORIENTATION_ROTATION_QUATERNION = 8;
 }

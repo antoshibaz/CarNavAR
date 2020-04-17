@@ -6,11 +6,10 @@ import android.os.Bundle;
 import android.widget.Toast;
 
 import com.app.carnavar.maps.NavMapFragment;
-import com.app.carnavar.services.gpsimu.GpsImuService;
 import com.app.carnavar.services.ServicesRepository;
+import com.app.carnavar.services.gpsimu.GpsImuService;
 import com.app.carnavar.utils.android.PermissionsManager;
 import com.mapbox.api.geocoding.v5.models.CarmenFeature;
-import com.mapbox.geojson.Point;
 import com.mapbox.mapboxsdk.plugins.places.autocomplete.PlaceAutocomplete;
 
 import java.util.List;

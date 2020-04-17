@@ -2,7 +2,7 @@ package com.app.carnavar.ar.arcorelocation.rendering;
 
 import com.app.carnavar.ar.arcorelocation.LocationMarker;
 import com.app.carnavar.ar.arcorelocation.LocationScene;
-import com.app.carnavar.ar.arcorelocation.utils.LocationUtils;
+import com.app.carnavar.utils.maps.MapsUtils;
 import com.google.ar.core.Anchor;
 import com.google.ar.sceneform.AnchorNode;
 import com.google.ar.sceneform.FrameTime;
@@ -178,12 +178,12 @@ public class LocationNode extends AnchorNode {
     public void scaleAndRotate() {
         for (Node n : getChildren()) {
             int markerDistance = (int) Math.ceil(
-                    LocationUtils.distance(
+                    MapsUtils.haversineDistance3d(
                             locationMarker.latitude,
-                            locationScene.getCurrentLocation().getLatitude(),
                             locationMarker.longitude,
-                            locationScene.getCurrentLocation().getLongitude(),
                             0,
+                            locationScene.getCurrentLocation().getLatitude(),
+                            locationScene.getCurrentLocation().getLongitude(),
                             0)
             );
             setDistance(markerDistance);

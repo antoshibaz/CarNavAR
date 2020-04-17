@@ -7,6 +7,7 @@ import android.util.Log;
 import android.widget.Toast;
 
 import com.app.carnavar.utils.android.ThemeUtils;
+import com.app.carnavar.utils.maps.MapsUtils;
 import com.mapbox.android.core.location.LocationEngine;
 import com.mapbox.android.core.location.LocationEngineCallback;
 import com.mapbox.android.core.location.LocationEngineProvider;
@@ -20,6 +21,7 @@ import com.mapbox.api.geocoding.v5.models.CarmenFeature;
 import com.mapbox.core.constants.Constants;
 import com.mapbox.geojson.LineString;
 import com.mapbox.geojson.Point;
+import com.mapbox.geojson.utils.PolylineUtils;
 import com.mapbox.mapboxsdk.Mapbox;
 import com.mapbox.mapboxsdk.camera.CameraPosition;
 import com.mapbox.mapboxsdk.camera.CameraUpdate;
@@ -61,6 +63,8 @@ import retrofit2.Callback;
 import retrofit2.Response;
 
 public class NavMap {
+
+    public static final String TAG = NavMap.class.getSimpleName();
 
     private MapView mapView;
     private MapboxMap map;
@@ -306,7 +310,7 @@ public class NavMap {
         return locationComponent.getLastKnownLocation();
     }
 
-    public void trackingMyLocation() {
+    public void trackingMyLocation(int retToLocationDuration) {
         if (locationComponent.getLastKnownLocation() != null) {
             CameraUpdate cameraPosition = CameraUpdateFactory.newCameraPosition(
                     new CameraPosition.Builder()
@@ -318,7 +322,7 @@ public class NavMap {
                             .build());
             NavigationCameraUpdate cameraUpdate = new NavigationCameraUpdate(cameraPosition);
             cameraUpdate.setMode(CameraUpdateMode.OVERRIDE);
-            mapCamera.update(cameraUpdate, 2000, new MapboxMap.CancelableCallback() {
+            mapCamera.update(cameraUpdate, retToLocationDuration, new MapboxMap.CancelableCallback() {
                 @Override
                 public void onCancel() {
 
@@ -423,39 +427,25 @@ public class NavMap {
         return lineString.coordinates();
     }
 
-//    private Point[] getRoutePoints(@NotNull DirectionsRoute route) {
-//        ArrayList<Point> routePoints = new ArrayList<>();
-//
-//        List<RouteLeg> legs = route.legs();
-//        if (legs != null) {
-//            for (RouteLeg leg : legs) {
-//
-//                List<LegStep> steps = leg.steps();
-//                if (steps != null) {
-//                    for (LegStep step : steps) {
-//                        RoutePoint point = new RoutePoint((new GeoCoordinate(
-//                                step.maneuver().location().latitude(),
-//                                step.maneuver().location().longitude()
-//                        )), mapToManeuverType(step.maneuver().type()));
-//
-//                        routePoints.add(point);
-//
-//                        List<Point> geometryPoints = buildStepPointsFromGeometry(step.geometry());
-//                        for (Point geometryPoint : geometryPoints) {
-//                            point = new RoutePoint((new GeoCoordinate(
-//                                    geometryPoint.latitude(),
-//                                    geometryPoint.longitude()
-//                            )), NavigationConstants.ManeuverType.None);
-//
-//                            routePoints.add(point);
-//                        }
-//                    }
-//                }
-//            }
-//        }
-//
-//        return routePoints.toArray(new RoutePoint[0]);
-//    }
+    public static Point[] getRoutePoints(DirectionsRoute route) {
+        ArrayList<Point> routePoints = new ArrayList<>();
+        List<RouteLeg> legs = route.legs();
+        if (legs != null) {
+            for (RouteLeg leg : legs) {
+                List<LegStep> steps = leg.steps();
+                if (steps != null) {
+                    for (LegStep step : steps) {
+                        if (step.geometry() != null) {
+                            List<Point> geometryPoints = PolylineUtils.decode(step.geometry(), Constants.PRECISION_6);
+                            routePoints.addAll(geometryPoints);
+                        }
+                    }
+                }
+            }
+        }
+
+        return routePoints.toArray(new Point[0]);
+    }
 
     public void shutdown() {
         if (locationEngine != null) {
@@ -472,7 +462,7 @@ public class NavMap {
         public void onSuccess(LocationEngineResult result) {
             if (result.getLastLocation() != null) {
 //                updateLocation(result.getLastLocation());
-                Log.d("MapboxLocation", result.getLastLocation().toString());
+                Log.d(TAG, "Mapbox location -> " + MapsUtils.toString(result.getLastLocation()));
             }
         }
 
@@ -533,5 +523,6 @@ public class NavMap {
                     location.getLatitude());
             getRoutes(srcPoint, currentDestinationPoint, buildRoutesCallback);
         }
+//        RouteFetcher
     };
 }

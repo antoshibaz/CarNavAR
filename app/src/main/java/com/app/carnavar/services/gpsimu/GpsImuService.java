@@ -13,8 +13,8 @@ import com.app.carnavar.hal.sensors.SensorTypes;
 import com.app.carnavar.services.ServiceBinder;
 import com.app.carnavar.services.gpsimu.GpsImuServiceInterfaces.GpsLocationListener;
 import com.app.carnavar.services.gpsimu.GpsImuServiceInterfaces.ImuListener;
-import com.app.carnavar.utils.MapsUtils;
-import com.app.carnavar.utils.TimeUtils;
+import com.app.carnavar.utils.android.TimeUtils;
+import com.app.carnavar.utils.maps.MapsUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -71,14 +71,14 @@ public class GpsImuService extends Service {
         }
     }
 
-    public void retrieveCallingLastGpsLocation(GpsLocationListener gpsLocationListener) {
+    public void requestLastGpsLocation(GpsLocationListener gpsLocationListener) {
         Location lastLoc = gpsImuFusionLocationThread.getLastLocation();
         if (lastLoc != null) {
             gpsLocationListener.onGpsLocationReturned(gpsImuFusionLocationThread.getLastLocation());
         }
     }
 
-    public void retrieveCallingLastImu(ImuListener imuListener) {
+    public void requestLastImuValues(ImuListener imuListener) {
         if (imuListenerList.contains(imuListener)) {
         }
     }
@@ -110,7 +110,7 @@ public class GpsImuService extends Service {
                         int north = 0, east = 1, up = 2;
                         if (gpsImuFusionLocationThread.isInitialized()) {
                             gpsImuFusionLocationThread.postPredictTask(values[east], values[north],
-                                    TimeUtils.nano2milli(timeNanos));
+                                    TimeUtils.nanos2millis(timeNanos));
                         }
                     }
                     break;
@@ -120,6 +120,7 @@ public class GpsImuService extends Service {
         });
         gpsImuProviderThread.setGpsLocationListener(location -> {
             // base location
+//            Log.d(TAG, "Android location -> " + MapsUtils.toString(location));
             if (gpsImuFusionLocationThread != null) {
                 if (!gpsImuFusionLocationThread.isInitialized()) {
                     gpsImuFusionLocationThread.postInitTask(location);
