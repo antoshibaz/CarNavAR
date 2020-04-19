@@ -17,6 +17,8 @@ import com.app.carnavar.services.ServicesRepository;
 import com.app.carnavar.services.gpsimu.GpsImuService;
 import com.app.carnavar.services.gpsimu.GpsImuServiceInterfaces;
 import com.app.carnavar.ui.NavMapBottomSheet;
+import com.app.carnavar.utils.filters.LocationFilters;
+import com.app.carnavar.utils.maps.MapsUtils;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.gson.JsonObject;
@@ -48,11 +50,16 @@ public class NavMapFragment extends Fragment {
     private FloatingActionButton locationsSearchFab;
     private FloatingActionButton fabArNav;
 
+    private LocationFilters.GeoHeuristicFilter geoHeuristicFilter = new LocationFilters.GeoHeuristicFilter();
+
     private GpsImuServiceInterfaces.GpsLocationListener gpsLocationListener = new GpsImuServiceInterfaces.GpsLocationListener() {
         @Override
         public void onGpsLocationReturned(Location location) {
             if (navMap != null) {
-                navMap.updateLocation(location);
+                Location filteredLocation = geoHeuristicFilter.process(location);
+                Log.d(TAG, "Filtered location -> bearIsEstablished=" + geoHeuristicFilter.bearingIsEstablished()
+                        + " " + MapsUtils.toString(filteredLocation));
+                navMap.updateLocation(filteredLocation);
             }
         }
     };

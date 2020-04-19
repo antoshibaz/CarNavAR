@@ -2,6 +2,7 @@ package com.app.carnavar.services.gpsimu;
 
 import android.app.Service;
 import android.content.Intent;
+import android.hardware.GeomagneticField;
 import android.location.Location;
 import android.os.Binder;
 import android.os.Handler;
@@ -25,7 +26,8 @@ public class GpsImuService extends Service {
 
     private final IBinder binder = new LocalBinder();
 
-    private GpsImuProviderThread gpsImuProviderThread;
+    private ImuProviderThread imuProviderThread;
+    private GpsProviderThread gpsProviderThread;
     private GpsImuFusionLocationThread gpsImuFusionLocationThread;
 
     private Handler clientHandler;
@@ -79,8 +81,6 @@ public class GpsImuService extends Service {
     }
 
     public void requestLastImuValues(ImuListener imuListener) {
-        if (imuListenerList.contains(imuListener)) {
-        }
     }
 
     private void publishToClients(Runnable r) {
@@ -94,33 +94,45 @@ public class GpsImuService extends Service {
         super.onCreate();
         clientHandler = new Handler(Looper.getMainLooper()); // main (ui) thread | or Looper.myLooper()
 
-        gpsImuProviderThread = GpsImuProviderThread.createAndStart(this.getApplicationContext());
-        gpsImuProviderThread.setImuListener((values, sensorType, timeNanos) -> {
-            switch (sensorType) {
-                case SensorTypes.ORIENTATION_ROTATION_ANGLES: // orientation
-                    break;
-                case SensorTypes.ABSOLUTE_LINEAR_ACCELERATION: // abs accelerations
-                    // TODO: fix NAN
-                    if (Float.isNaN(values[0]) || Float.isNaN(values[1])) {
-                        Log.e(TAG, "abs accelerations is NAN. Values is dropped!");
-                        return;
-                    }
+        imuProviderThread = ImuProviderThread.createAndStart(this.getApplicationContext());
+        imuProviderThread.setImuListener((values, sensorType, timeNanos) -> {
+            publishToClients(() -> notifyAllImuListeners(values, sensorType, timeNanos));
 
-                    if (gpsImuFusionLocationThread != null) {
+            if (gpsImuFusionLocationThread != null) {
+                Location lastLocation = gpsImuFusionLocationThread.getLastLocation();
+                if (lastLocation != null) {
+                    imuProviderThread.postTask(() -> {
+                        imuProviderThread.retrieveImuProvider().setGeomagneticField(new GeomagneticField(
+                                (float) lastLocation.getLatitude(),
+                                (float) lastLocation.getLongitude(),
+                                (float) lastLocation.getAltitude(),
+                                lastLocation.getTime()));
+                    });
+                }
+
+                switch (sensorType) {
+                    case SensorTypes.ORIENTATION_ROTATION_ANGLES: // orientation
+                        break;
+                    case SensorTypes.ABSOLUTE_LINEAR_ACCELERATION: // abs accelerations
+                        // TODO: fix NAN
+                        if (Float.isNaN(values[0]) || Float.isNaN(values[1])) {
+                            Log.e(TAG, "abs accelerations is NAN. Values is dropped!");
+                            return;
+                        }
                         int north = 0, east = 1, up = 2;
                         if (gpsImuFusionLocationThread.isInitialized()) {
                             gpsImuFusionLocationThread.postPredictTask(values[east], values[north],
                                     TimeUtils.nanos2millis(timeNanos));
                         }
-                    }
-                    break;
+                        break;
+                }
             }
-
-            publishToClients(() -> notifyAllImuListeners(values, sensorType, timeNanos));
         });
-        gpsImuProviderThread.setGpsLocationListener(location -> {
+
+        gpsProviderThread = GpsProviderThread.createAndStart(this.getApplicationContext());
+        gpsProviderThread.setGpsLocationListener(location -> {
             // base location
-//            Log.d(TAG, "Android location -> " + MapsUtils.toString(location));
+            Log.d(TAG, "Android location -> " + MapsUtils.toString(location));
             if (gpsImuFusionLocationThread != null) {
                 if (!gpsImuFusionLocationThread.isInitialized()) {
                     gpsImuFusionLocationThread.postInitTask(location);
@@ -156,12 +168,20 @@ public class GpsImuService extends Service {
     }
 
     private void shutdown() {
-        gpsImuProviderThread.quitSafely();
+        imuProviderThread.quitSafely();
         try {
-            gpsImuProviderThread.join();
-            gpsImuProviderThread = null;
+            imuProviderThread.join();
+            imuProviderThread = null;
         } catch (final InterruptedException e) {
-            Log.e(TAG, GpsImuProviderThread.TAG + " throw InterruptedException");
+            Log.e(TAG, ImuProviderThread.TAG + " throw InterruptedException");
+        }
+
+        gpsProviderThread.quitSafely();
+        try {
+            gpsProviderThread.join();
+            gpsProviderThread = null;
+        } catch (final InterruptedException e) {
+            Log.e(TAG, GpsProviderThread.TAG + " throw InterruptedException");
         }
 
         gpsImuFusionLocationThread.quitSafely();

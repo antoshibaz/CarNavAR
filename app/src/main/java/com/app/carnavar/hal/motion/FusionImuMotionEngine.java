@@ -16,18 +16,22 @@ import com.app.carnavar.hal.sensors.SensorTypes;
 import com.app.carnavar.hal.sensors.VirtualSensor;
 import com.app.carnavar.utils.android.TimeUtils;
 import com.app.carnavar.utils.filters.SmoothingFilters;
+import com.app.carnavar.utils.math.Matrix;
+import com.app.carnavar.utils.math.Matrix2;
 import com.app.carnavar.utils.math.MatrixF4x4;
 import com.app.carnavar.utils.math.Quaternion;
 
+import org.opencv.core.Mat;
 
-public class FusionImuMotionEstimator extends VirtualSensor {
 
-    public static final String TAG = FusionImuMotionEstimator.class.getSimpleName();
+public class FusionImuMotionEngine extends VirtualSensor {
+
+    public static final String TAG = FusionImuMotionEngine.class.getSimpleName();
 
     // gyro fusion parameters
     private static final double GYRO_EPSILON = 0.02f;
     private static final float GYRO_OUTLIER_THRESHOLD = 0.75f;
-    private static final float GYRO_DIRECT_INTERPOLATION_WEIGHT = 0.5f;
+    private static final float GYRO_DIRECT_INTERPOLATION_WEIGHT = 0.1f;
 
     // sensors
     private Accelerometer accelerometer;
@@ -63,7 +67,7 @@ public class FusionImuMotionEstimator extends VirtualSensor {
 
     // for device orientation in remapped coordinate system (sensors system -> remapped sensor system -> world system)
     private MatrixF4x4 currentDeviceOrientationRotationMatrix = new MatrixF4x4();
-    private float[] currentDeviceOrientationAngles = new float[3];
+    private float[] currentDeviceOrientationAngles = new float[]{-1, 0, 0};
 
     private GeomagneticField geomagneticField;
     private boolean useMagnetDeclinationForOrientation = true;
@@ -79,7 +83,7 @@ public class FusionImuMotionEstimator extends VirtualSensor {
     private SensorManager sensorManager;
     private WindowManager windowManager;
 
-    public FusionImuMotionEstimator(Context context) {
+    public FusionImuMotionEngine(Context context) {
         super();
         sensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
         windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
@@ -95,7 +99,7 @@ public class FusionImuMotionEstimator extends VirtualSensor {
         magnetFilter = new SmoothingFilters.LowPassFilter();
     }
 
-    public FusionImuMotionEstimator(Context context, Handler handler) {
+    public FusionImuMotionEngine(Context context, Handler handler) {
         super(handler);
         sensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
         windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
@@ -163,6 +167,7 @@ public class FusionImuMotionEstimator extends VirtualSensor {
                         if (!orientationInitialized) orientationInitialized = true;
                         notifyAllSensorValuesCaptureListeners(currentDeviceOrientationAngles, SensorTypes.ORIENTATION_ROTATION_ANGLES,
                                 TimeUtils.currentAndroidSystemTimeNanos());
+                        Log.d(TAG, " bearing=" + currentDeviceOrientationAngles[0]);
                     }
                     break;
                 }
@@ -183,7 +188,10 @@ public class FusionImuMotionEstimator extends VirtualSensor {
                 }
 
                 case SensorTypes.MAGNETIC_FIELD: {
-                    processMagnetometer(magnetFilter.processArray(values, MAGNETIC_FILTERING_FACTOR), timeNanos);
+                    float[] magVals = magnetFilter.processArray(values, MAGNETIC_FILTERING_FACTOR);
+                    notifyAllSensorValuesCaptureListeners(magVals, SensorTypes.MAGNETIC_FIELD,
+                            TimeUtils.currentAndroidSystemTimeNanos());
+                    processMagnetometer(magVals, timeNanos);
                 }
             }
         }
@@ -241,7 +249,7 @@ public class FusionImuMotionEstimator extends VirtualSensor {
     private void processGyroscopeFusion(float[] gyroValues, long timestamp) {
         // freq = (count++) / ((thisTimestamp - initTimestamp) * NS2S);
         // dt = 1.0f / freq; // more stability
-        final float dT = TimeUtils.nanos2sec(timestamp - gyroLastTimestamp);
+        final float dT = (float) TimeUtils.nanos2sec(timestamp - gyroLastTimestamp);
 
         // Axis of the rotation sample, not normalized yet.
         float axisX = gyroValues[0];
@@ -276,11 +284,12 @@ public class FusionImuMotionEstimator extends VirtualSensor {
         // Calculate dot-product to calculate whether the two orientation sensors have diverged
         // (if the dot-product is closer to 0 than to 1), because it should be close to 1 if both are the same.
         float dotProd = gyroOrientationQuaternion.dotProduct(orientationRotationVectorQuaternion);
+        //Log.d(TAG, "Gyro and mag+acc dot product: " + dotProd);
 
         // If they have diverged, rely on gyroscope only (this happens on some devices when the rotation vector "jumps").
         if (Math.abs(dotProd) < GYRO_OUTLIER_THRESHOLD) {
             gyroPanicCounter++;
-            Log.d(TAG, "Gyro and mag+acc dot product < " + GYRO_OUTLIER_THRESHOLD + ". Only gyro rot vec is used");
+            Log.d(TAG, "Gyro and mag+acc dot product: " + dotProd + " < " + GYRO_OUTLIER_THRESHOLD + ". Only gyro rot vec is used");
             // Directly use Gyro
             updateDeviceOrientation(gyroOrientationQuaternion);
         } else {
@@ -289,7 +298,8 @@ public class FusionImuMotionEstimator extends VirtualSensor {
             // The weight should be quite low, so the rotation vector corrects the gyro only slowly, and the output keeps responsive.
             //TODO: maybe use complimentary filter for fastest inference
             gyroOrientationQuaternion.slerp(orientationRotationVectorQuaternion, fusedInterpolOrientationQuaternion, GYRO_DIRECT_INTERPOLATION_WEIGHT);
-            //quaternionGyroscope.slerp(quaternionRotationVector, interpolatedQuaternion, (float) (INDIRECT_INTERPOLATION_WEIGHT * gyroscopeRotationVelocity));
+            //gyroOrientationQuaternion.slerp(orientationRotationVectorQuaternion, fusedInterpolOrientationQuaternion,
+            //        (float) ((1 - GYRO_DIRECT_INTERPOLATION_WEIGHT) * gyroRotationVelocity));
 
             // Use the interpolated value between gyro and rotationVector
             updateDeviceOrientation(fusedInterpolOrientationQuaternion);
@@ -312,12 +322,47 @@ public class FusionImuMotionEstimator extends VirtualSensor {
         gyroLastTimestamp = timestamp;
     }
 
+    SmoothingFilters.LowPassFilter magFilter = new SmoothingFilters.LowPassFilter();
+
     private void processMagnetometer(float[] magnetValues, long timestamp) {
 //        Log.d(TAG, "Mag:" + Arrays.toString(magnetValues) +
 //                " Mag-total:" + String.valueOf(Math.sqrt(
 //                magnetValues[0] * magnetValues[0] + magnetValues[1] * magnetValues[1] + magnetValues[2] * magnetValues[2])));
+        if (geomagneticField != null) {
+            float mdx = magnetValues[0];
+            float mdy = magnetValues[1];
+            float mdz = magnetValues[2];
+            float mex = geomagneticField.getX() / 1000; // convert from nT to uT
+            float mey = geomagneticField.getY() / 1000;
+            float mez = geomagneticField.getZ() / 1000;
+
+            // 1
+            float mdVecL2 = (float) Math.sqrt(mdx * mdx + mdy * mdy + mdz * mdz);
+            float meVecL2 = (float) Math.sqrt(mex * mex + mey * mey + mez * mez);
+            float magDiffFactor = Math.abs(mdVecL2 - meVecL2);
+
+            // 2
+            float dLinAccX = nonRemappedLinearAccelerations[0];
+            float dLinAccY = nonRemappedLinearAccelerations[1];
+            float dLinAccZ = nonRemappedLinearAccelerations[2];
+            float dLinAccL2 = (float) Math.sqrt(dLinAccX * dLinAccX + dLinAccY * dLinAccY + dLinAccZ * dLinAccZ);
+            float eLinAccL2 = (float) Math.sqrt(SensorManager.GRAVITY_EARTH * SensorManager.GRAVITY_EARTH);
+            float dTheta = (float) Math.acos((dLinAccX * mdx + dLinAccY * mdy + dLinAccZ * mdz) / (mdVecL2 * dLinAccL2));
+            float eTheta = (float) Math.acos((0 * mex + 0 * mey + SensorManager.GRAVITY_EARTH * mez) / (meVecL2 * eLinAccL2));
+            float deltaTheta = (float) (Math.toDegrees(dTheta) - Math.toDegrees(eTheta));
+
+            magFilter.process(magDiffFactor, 0.1f);
+
+            Log.d(TAG, "mag_dev:" + mdVecL2 +
+                    " mag_earth:" + meVecL2 +
+                    " mag_diff_factor:" + magDiffFactor +
+                    " delta_theta:" + deltaTheta);
+        }
     }
 
+    // TODO: exists a problem with sometimes jumping bearing ~+-10 deg as with androidRotationVector+gyro and as androidRotationVector
+    //  this watched during receive gps data
+    //  smoothing rotations maybe a temporary solution
     private void updateDeviceOrientation(Quaternion newOrientationQuaternion) {
         fusionDeviceOrientationQuaternion.set(newOrientationQuaternion);
         // We inverted w in the deltaQuaternion, because currentOrientationQuaternion required it.
@@ -332,6 +377,7 @@ public class FusionImuMotionEstimator extends VirtualSensor {
         fusionDeviceOrientationAngles[1] = angles[1];
         fusionDeviceOrientationAngles[2] = angles[2];
         fusionDeviceOrientationAngles[0] = angles[0];
+//        Log.d(TAG, " bearing2=" + (Math.toDegrees(fusionDeviceOrientationAngles[0]) + 360f) % 360f);
 
         int worldAxisForDeviceAxisX;
         int worldAxisForDeviceAxisY;
@@ -357,18 +403,21 @@ public class FusionImuMotionEstimator extends VirtualSensor {
                 break;
         }
 
+        float[] angles2 = new float[3];
         SensorManager.remapCoordinateSystem(fusionDeviceOrientationRotationMatrix.matrix, worldAxisForDeviceAxisX,
                 worldAxisForDeviceAxisY, currentDeviceOrientationRotationMatrix.matrix);
-        SensorManager.getOrientation(currentDeviceOrientationRotationMatrix.matrix, angles);
+        SensorManager.getOrientation(currentDeviceOrientationRotationMatrix.matrix, angles2);
+        System.arraycopy(angles2, 0, currentDeviceOrientationAngles, 0, currentDeviceOrientationAngles.length);
 
         // convert angles radians to degrees
-        currentDeviceOrientationAngles[1] = (float) Math.toDegrees(angles[1]);
-        currentDeviceOrientationAngles[2] = (float) Math.toDegrees(angles[2]);
-        currentDeviceOrientationAngles[0] = (float) Math.toDegrees(angles[0]); // scale to 0-360 deg
+        currentDeviceOrientationAngles[1] = (float) Math.toDegrees(currentDeviceOrientationAngles[1]);
+        currentDeviceOrientationAngles[2] = (float) Math.toDegrees(currentDeviceOrientationAngles[2]);
+        currentDeviceOrientationAngles[0] = (float) Math.toDegrees(currentDeviceOrientationAngles[0]); // scale to 0-360 deg
         if (geomagneticField != null && useMagnetDeclinationForOrientation) {
             currentDeviceOrientationAngles[0] += geomagneticField.getDeclination();
         }
         currentDeviceOrientationAngles[0] = (currentDeviceOrientationAngles[0] + 360f) % 360f;
+//        Log.d(TAG, " bearing2=" + currentDeviceOrientationAngles[0]);
     }
 
     @Override

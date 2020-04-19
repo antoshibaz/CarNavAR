@@ -1,5 +1,8 @@
 package com.app.carnavar.utils.filters;
 
+import android.util.Log;
+
+import com.app.carnavar.utils.maps.MapsUtils;
 import com.app.carnavar.utils.math.Matrix2;
 
 /**
@@ -72,8 +75,8 @@ public class KalmanFilter {
         Matrix2.matrixAdd(Xk_km1, auxBxU, Xk_km1);
 
         // get predictive location
-//        double[] loc = MapsUtils.getLatLngByDistances(Xk_km1.data[0][0], Xk_km1.data[1][0]);
-//        Log.d("kalman predict loc", "lat=" + loc[0] + " lng=" + loc[1]);
+        double[] loc = MapsUtils.getLatLngByDistances(Xk_km1.data[0][0], Xk_km1.data[1][0]);
+        Log.d("kalman predict location -> ", "lat=" + loc[0] + " lng=" + loc[1]);
 
         //Pk|k-1 = Fk*Pk-1|k-1*Fk(t) + Qk
         Matrix2.matrixMultiply(F, Pk_k, auxSDxSD);

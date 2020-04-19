@@ -22,9 +22,9 @@ public class GpsImuFusionLocationThread extends HandlerThread {
     private Handler handler;
 
     private KalmanGpsImuFusionEngine kalmanGpsImuFusionEngine;
-    private boolean isInitialized = false;
+    private volatile boolean isInitialized = false;
 
-    private Location lastLocation = null;
+    private volatile Location lastLocation = null;
 
     private GpsLocationListener gpsLocationListener;
 
@@ -50,6 +50,10 @@ public class GpsImuFusionLocationThread extends HandlerThread {
 
     public boolean isInitialized() {
         return isInitialized;
+    }
+
+    public void postTask(Runnable r) {
+        handler.post(r);
     }
 
     public void postInitTask(Location location) {

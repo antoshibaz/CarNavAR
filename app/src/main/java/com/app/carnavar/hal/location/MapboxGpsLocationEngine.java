@@ -50,7 +50,10 @@ public class MapboxGpsLocationEngine extends GpsLocationEngine implements Locati
     @Override
     public void start() {
         stop();
-        LocationEngineRequest locationEngineRequest = new LocationEngineRequest.Builder(1L).setFastestInterval(1L).build();
+        LocationEngineRequest locationEngineRequest = new LocationEngineRequest.Builder(0)
+                .setFastestInterval(0)
+                .setPriority(LocationEngineRequest.PRIORITY_HIGH_ACCURACY)
+                .build();
         if (handler != null) {
             mapboxLocationEngine.requestLocationUpdates(locationEngineRequest, this, handler.getLooper());
         } else {

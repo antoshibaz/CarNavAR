@@ -10,9 +10,15 @@ public class TimeUtils {
     public static final double NS2MS = 1.0f / 1000000.0f;
     // nanoseconds to microseconds
     public static final double NS2MCS = 1.0f / 1000.0f;
+    // milliseconds to seconds
+    public static final double MS2S = 1.0f / 1000.0f;
 
-    public static long nanos2sec(long nanoseconds) {
-        return (long) (nanoseconds * NS2S);
+    public static double nanos2sec(long nanoseconds) {
+        return nanoseconds * NS2S;
+    }
+
+    public static double millis2sec(long milliseconds) {
+        return milliseconds * MS2S;
     }
 
     public static long nanos2millis(long nanoseconds) {
@@ -36,7 +42,7 @@ public class TimeUtils {
     }
 
     public static long currentJavaSystemTimeSec() {
-        return nanos2sec(currentJavaSystemTimeNanos());
+        return (long) nanos2sec(currentJavaSystemTimeNanos());
     }
 
     public static long currentAndroidSystemTimeNanos() {
@@ -52,7 +58,7 @@ public class TimeUtils {
     }
 
     public static long currentAndroidSystemTimeSec() {
-        return nanos2sec(currentAndroidSystemTimeNanos());
+        return (long) nanos2sec(currentAndroidSystemTimeNanos());
     }
 
     public static long currentJavaSystemTimestampMillis() {
