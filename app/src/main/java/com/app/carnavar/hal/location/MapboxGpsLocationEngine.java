@@ -36,7 +36,7 @@ public class MapboxGpsLocationEngine extends GpsLocationEngine implements Locati
 
     @Override
     public void onSuccess(LocationEngineResult result) {
-        if (result != null) {
+        if (result != null && result.getLastLocation() != null) {
             lastLocation = result.getLastLocation();
             notifyAllGpsLocationUpdateListeners(lastLocation);
         }

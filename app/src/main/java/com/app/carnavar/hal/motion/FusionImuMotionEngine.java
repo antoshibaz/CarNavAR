@@ -16,12 +16,8 @@ import com.app.carnavar.hal.sensors.SensorTypes;
 import com.app.carnavar.hal.sensors.VirtualSensor;
 import com.app.carnavar.utils.android.TimeUtils;
 import com.app.carnavar.utils.filters.SmoothingFilters;
-import com.app.carnavar.utils.math.Matrix;
-import com.app.carnavar.utils.math.Matrix2;
 import com.app.carnavar.utils.math.MatrixF4x4;
 import com.app.carnavar.utils.math.Quaternion;
-
-import org.opencv.core.Mat;
 
 
 public class FusionImuMotionEngine extends VirtualSensor {
@@ -78,7 +74,7 @@ public class FusionImuMotionEngine extends VirtualSensor {
     private SmoothingFilters.LowPassFilter gyroFilter;
     private static final float GYRO_FILTERING_FACTOR = 0.99f;
     private SmoothingFilters.LowPassFilter magnetFilter;
-    private static final float MAGNETIC_FILTERING_FACTOR = 0.75f;
+    private static final float MAGNETIC_FILTERING_FACTOR = 0.3f;
 
     private SensorManager sensorManager;
     private WindowManager windowManager;
@@ -189,9 +185,9 @@ public class FusionImuMotionEngine extends VirtualSensor {
 
                 case SensorTypes.MAGNETIC_FIELD: {
                     float[] magVals = magnetFilter.processArray(values, MAGNETIC_FILTERING_FACTOR);
-                    notifyAllSensorValuesCaptureListeners(magVals, SensorTypes.MAGNETIC_FIELD,
-                            TimeUtils.currentAndroidSystemTimeNanos());
-                    processMagnetometer(magVals, timeNanos);
+//                    notifyAllSensorValuesCaptureListeners(magVals, SensorTypes.MAGNETIC_FIELD,
+//                            TimeUtils.currentAndroidSystemTimeNanos());
+//                    processMagnetometer(magVals, timeNanos);
                 }
             }
         }
@@ -335,6 +331,13 @@ public class FusionImuMotionEngine extends VirtualSensor {
             float mex = geomagneticField.getX() / 1000; // convert from nT to uT
             float mey = geomagneticField.getY() / 1000;
             float mez = geomagneticField.getZ() / 1000;
+
+            Log.d(TAG, "mdx=" + mdx +
+                    " mdy=" + mdy +
+                    " mdz=" + mdz +
+                    " mex:" + mex +
+                    " mey:" + mey +
+                    " mez:" + mez);
 
             // 1
             float mdVecL2 = (float) Math.sqrt(mdx * mdx + mdy * mdy + mdz * mdz);

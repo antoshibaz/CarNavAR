@@ -2,7 +2,7 @@ package com.app.carnavar;
 
 import android.content.Context;
 import android.content.Intent;
-import android.hardware.GeomagneticField;
+import android.graphics.Bitmap;
 import android.location.Location;
 import android.media.Image;
 import android.media.ImageReader;
@@ -15,6 +15,8 @@ import android.widget.TextView;
 
 import com.app.carnavar.ar.arcorelocation.LocationMarker;
 import com.app.carnavar.ar.arcorelocation.LocationScene;
+import com.app.carnavar.cv.CvInferenceThread;
+import com.app.carnavar.hal.calib.MagnetHeadingCalibrator;
 import com.app.carnavar.hal.sensors.SensorTypes;
 import com.app.carnavar.maps.NavMap;
 import com.app.carnavar.services.ServicesRepository;
@@ -26,7 +28,6 @@ import com.app.carnavar.utils.android.LibsUtils;
 import com.app.carnavar.utils.filters.LocationFilters;
 import com.app.carnavar.utils.filters.SmoothingFilters;
 import com.app.carnavar.utils.maps.MapsUtils;
-import com.app.carnavar.utils.math.Matrix2;
 import com.google.ar.core.Frame;
 import com.google.ar.core.Session;
 import com.google.ar.core.SharedCamera;
@@ -44,8 +45,6 @@ import com.google.ar.sceneform.rendering.ViewRenderable;
 import com.mapbox.geojson.Point;
 import com.mapbox.mapboxsdk.maps.MapView;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -84,50 +83,65 @@ public class ArActivity extends AppCompatActivity {
     private SmoothingFilters.LowPassFilter poseFilter;
     private static final double POSE_FILTERING_FACTOR = 0.1;
 
-    private float[] currentPoseAngles;
+    private CvInferenceThread cvInferenceThread;
 
-    GeomagneticField geomagneticField;
-    double sx;
-    double bx;
-    double sy;
-    double by;
-    boolean isCalib = false;
+    private MagnetHeadingCalibrator magnetHeadingCalibrator = new MagnetHeadingCalibrator(15,
+            new MagnetHeadingCalibrator.CalibStatusCallback() {
+                @Override
+                public void samplesIsCollected() {
+                    magnetHeadingCalibrator.calib();
+                }
+
+                @Override
+                public void calibIsSuccessCompleted() {
+                    if (!calibIsOk) {
+                        calibIsOk = true;
+                    }
+                }
+            });
+    float[] magnetValues = new float[3];
+    private boolean calibIsOk = false;
+
+    private float[] currentPoseAngles;
+    private Location lastLocation;
+
+    private boolean testCalibIsRun = false;
+
+    private void testCalib() {
+        new Handler().postDelayed(() -> {
+            magnetHeadingCalibrator.addSample(lastLocation, new double[]{magnetValues[0], magnetValues[1]});
+            testCalib();
+        }, 500);
+    }
 
     private GpsImuServiceInterfaces.ImuListener imuListener = (values, sensorType, timeNanos) -> {
         if (sensorType == SensorTypes.ORIENTATION_ROTATION_ANGLES) {
             currentPoseAngles = poseFilter.processArray(values, (float) POSE_FILTERING_FACTOR);
+
             if (navMap != null && navMapInitSuccess) {
                 navMap.updateOrientation(currentPoseAngles[0]);
             }
+
             if (locationScene != null) {
                 locationScene.updateBearing(currentPoseAngles[0]);
             }
             Log.d(TAG, " ar_bearing=" + currentPoseAngles[0]);
         } else if (sensorType == SensorTypes.MAGNETIC_FIELD) {
-            collectCalib1(values);
+            System.arraycopy(values, 0, magnetValues, 0, values.length);
 
-            if (geomagneticField != null && sx != 0 && sy != 0) {
-                double calibMx = (values[0] + bx) / sx;
-                double calibMy = (values[1] + by) / sy;
-                double offset = 0;
-                if (calibMx < 0) {
-                    offset = -180;
-                }
-
-                double calibBearing = ((Math.toDegrees(Math.atan2(calibMy, calibMx)))
-                        + geomagneticField.getDeclination() + offset + 360f) % 360f;
-                Log.d(TAG, "with_calib_bearing=" + calibBearing);
-            }
+//            if (calibIsOk) {
+//                double calibBearing = magnetHeadingCalibrator.getCalibHeading(new double[]{magnetValues[0], magnetValues[1]},
+//                        true);
+//                Log.d(TAG, "calib_bearing=" + calibBearing);
+//            }
         }
     };
 
-    Location lastLocation;
-    boolean isrun = false;
     private GpsImuServiceInterfaces.GpsLocationListener gpsLocationListener = location -> {
         Location filteredLocation = geoHeuristicFilter.process(location);
+        lastLocation = location;
         Log.d(TAG, "Filtered location -> bearIsEstablished=" + geoHeuristicFilter.bearingIsEstablished()
                 + " " + MapsUtils.toString(filteredLocation));
-        lastLocation = filteredLocation;
 
         if (navMap != null && navMapInitSuccess) {
             navMap.updateLocation(filteredLocation);
@@ -140,149 +154,16 @@ public class ArActivity extends AppCompatActivity {
                 }
             }
         }
+
         if (locationScene != null) {
             locationScene.updateGpsLocation(filteredLocation);
         }
 
-        if (!isrun) {
-            isrun = true;
-            testCalib(1000);
-        }
-    };
-
-    Matrix2 x1Res = new Matrix2(2, 1);
-    Matrix2 x2Res = new Matrix2(2, 1);
-
-    private void calib(Double[] hxArr, Double[] hyArr, double hh, Double[] extBearings) {
-        if (hxArr.length != extBearings.length
-                || hyArr.length != extBearings.length) {
-            return;
-        }
-
-        Matrix2 h1 = new Matrix2(hxArr.length, 2);
-        Matrix2 h2 = new Matrix2(hyArr.length, 2);
-        double kh1 = 1 / hh;
-        double kh2 = -1 / hh;
-        for (int i = 0; i < hxArr.length; i++) {
-            h1.data[i][0] = hxArr[i] * kh1;
-            h1.data[i][1] = -1 * kh1;
-            h2.data[i][0] = hyArr[i] * kh2;
-            h2.data[i][1] = -1 * kh2;
-        }
-
-        Matrix2 y1 = new Matrix2(extBearings.length, 1);
-        Matrix2 y2 = new Matrix2(extBearings.length, 1);
-        for (int i = 0; i < extBearings.length; i++) {
-            y1.data[i][0] = Math.cos(Math.toRadians(extBearings[i]));
-            y2.data[i][0] = Math.sin(Math.toRadians(extBearings[i]));
-        }
-
-        Matrix2 h1T = new Matrix2(2, hxArr.length);
-        Matrix2 h2T = new Matrix2(2, hyArr.length);
-        Matrix2.matrixTranspose(h1, h1T);
-        Matrix2.matrixTranspose(h2, h2T);
-
-        Matrix2 mul1 = new Matrix2(2, 2);
-        Matrix2 mul2 = new Matrix2(2, 2);
-        Matrix2 mul1inv = new Matrix2(2, 2);
-        Matrix2 mul2inv = new Matrix2(2, 2);
-        Matrix2.matrixMultiply(h1T, h1, mul1);
-        Matrix2.matrixMultiply(h2T, h2, mul2);
-        if (!Matrix2.matrixDestructiveInvert(mul1, mul1inv)) {
-            Log.d(TAG, "mat not invert 1");
-            return;
-        }
-        if (!Matrix2.matrixDestructiveInvert(mul2, mul2inv)) {
-            Log.d(TAG, "mat not invert 2");
-            return;
-        }
-
-        Matrix2 y1Mul = new Matrix2(2, hxArr.length);
-        Matrix2 y2Mul = new Matrix2(2, hyArr.length);
-        Matrix2.matrixMultiply(mul1inv, h1T, y1Mul);
-        Matrix2.matrixMultiply(mul2inv, h2T, y2Mul);
-        Matrix2.matrixMultiply(y1Mul, y1, x1Res);
-        Matrix2.matrixMultiply(y2Mul, y2, x2Res);
-    }
-
-    private void testCalib(long time) {
-        new Handler().postDelayed(() -> {
-            if (extBearings.size() >= 5) {
-                calib(hxArr.toArray(new Double[0]), hyArr.toArray(new Double[0]), hh, extBearings.toArray(new Double[0]));
-                sx = x1Res.data[0][0];
-                bx = x1Res.data[1][0];
-                sy = x2Res.data[0][0];
-                by = x2Res.data[1][0];
-                double calibMx = (magVals[0] + bx) / sx;
-                double calibMy = (magVals[1] + by) / sy;
-                double offset = 0;
-                if (calibMx < 0) {
-                    offset = -180;
-                }
-
-                double calibBearing = ((Math.toDegrees(Math.atan2(calibMy, calibMx)))
-                        + geomagneticField.getDeclination() + offset + 360f) % 360f;
-                Log.d(TAG, "calib_bearing=" + calibBearing + " calibMx=" + calibMx + " calibMy=" + calibMy
-                + " sx=" + sx + " sy=" +  sy);
-                extBearings.clear();
-                hxArr.clear();
-                hyArr.clear();
-                testCalib(5000);
-            } else {
-                collectCalib2(lastLocation);
-                testCalib(1000);
-            }
-        }, time);
-    }
-
-    private void collectCalib1(float[] magnetValues) {
-        float hdx = magnetValues[0], hdy = magnetValues[1], hdz = magnetValues[2];
-        magVals = magFilter.processArray(new float[]{hdx, hdy, hdz}, 0.1f);
-//        switch (windowManager.getDefaultDisplay().getRotation()) {
-//            case Surface.ROTATION_90:
-//            case Surface.ROTATION_270:
-//                hdx = magnetValues[1];
-//                hdy = magnetValues[2];
-//                hdz = magnetValues[0];
-//                break;
-//            case Surface.ROTATION_180:
-//            case Surface.ROTATION_0:
-//            default:
-//                hdx = magnetValues[0];
-//                hdy = magnetValues[2];
-//                hdz = magnetValues[1];
-//                break;
+//        if (!testCalibIsRun) {
+//            testCalib();
+//            testCalibIsRun = true;
 //        }
-    }
-
-    private void collectCalib2(Location location) {
-        geomagneticField = new GeomagneticField(
-                (float) location.getLatitude(),
-                (float) location.getLongitude(),
-                (float) location.getAltitude(),
-                location.getTime());
-        double bearingPhiExt = ((Math.random() < 0.5) ? (358 + Math.random() * 1.9) : Math.random() * 2);
-        Log.d(TAG, "pseudo real bear=" + bearingPhiExt);
-        bearingPhiExt = ((bearingPhiExt - geomagneticField.getDeclination()) + 360f) % 360f;
-        if (hh == 0) {
-            hh = geomagneticField.getHorizontalStrength() / 1000;
-        }
-        extBearings.add(bearingPhiExt);
-        hxArr.add((double) magVals[0]);
-        hyArr.add((double) magVals[1]);
-        Log.d(TAG, "added to calib -> bear=" + bearingPhiExt
-                + " hx=" + hxArr.get(hxArr.size() - 1)
-                + " hy=" + hyArr.get(hyArr.size() - 1)
-                + " hz=" + magVals[2]
-                + " hh=" + hh + " total_mag=" + geomagneticField.getFieldStrength() / 1000);
-    }
-
-    List<Double> extBearings = new ArrayList<>();
-    List<Double> hxArr = new ArrayList<>();
-    List<Double> hyArr = new ArrayList<>();
-    double hh = 0;
-    float[] magVals = new float[3];
-    SmoothingFilters.LowPassFilter magFilter = new SmoothingFilters.LowPassFilter();
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -366,7 +247,7 @@ public class ArActivity extends AppCompatActivity {
                         .setView(this, R.layout.poi_ar_view)
                         .build();
         CompletableFuture<ModelRenderable> arrowModel = ModelRenderable.builder()
-                .setSource(this, Uri.parse("models/RLab-arrow.sfb"))
+                .setSource(this, Uri.parse("3dmodels/RLab-arrow.sfb"))
                 .build();
 
         CompletableFuture.allOf(
@@ -438,6 +319,9 @@ public class ArActivity extends AppCompatActivity {
                             // image analysis
                             try (Image image = frame.acquireCameraImage()) {
 //                                Log.d(TAG, "" + image.getHeight() + "x" + image.getWidth());
+                                if (cvInferenceThread != null) {
+                                    cvInferenceThread.processFrame(image);
+                                }
                             } catch (NotYetAvailableException e) {
                             }
 
@@ -602,6 +486,10 @@ public class ArActivity extends AppCompatActivity {
             finish();
             return;
         }
+
+        cvInferenceThread = CvInferenceThread.createAndStart(this);
+        cvInferenceThread.setInferenceCallback(inferencedImage -> {
+        });
     }
 
     /**
@@ -616,6 +504,9 @@ public class ArActivity extends AppCompatActivity {
             serviceInstance.unregisterGpsLocationListener(gpsLocationListener);
         });
         ServicesRepository.getInstance().stopService(getApplicationContext(), GpsImuService.class);
+
+        cvInferenceThread.close();
+        cvInferenceThread = null;
 
         navMapView.onPause();
 
