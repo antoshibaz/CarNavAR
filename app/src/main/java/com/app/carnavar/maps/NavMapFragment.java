@@ -50,14 +50,14 @@ public class NavMapFragment extends Fragment {
     private FloatingActionButton locationsSearchFab;
     private FloatingActionButton fabArNav;
 
-    private LocationFilters.GeoHeuristicFilter geoHeuristicFilter = new LocationFilters.GeoHeuristicFilter();
+    private LocationFilters.GeoLocationHeuristicFilter geoLocationHeuristicFilter = new LocationFilters.GeoLocationHeuristicFilter();
 
     private GpsImuServiceInterfaces.GpsLocationListener gpsLocationListener = new GpsImuServiceInterfaces.GpsLocationListener() {
         @Override
         public void onGpsLocationReturned(Location location) {
             if (navMap != null) {
-                Location filteredLocation = geoHeuristicFilter.process(location);
-                Log.d(TAG, "Filtered location -> bearIsEstablished=" + geoHeuristicFilter.bearingIsEstablished()
+                Location filteredLocation = geoLocationHeuristicFilter.process(location);
+                Log.d(TAG, "Filtered location -> bearStab=" + geoLocationHeuristicFilter.isBearingIsStable() + " gpsBearEstablished=" + geoLocationHeuristicFilter.bearingIsEstablished()
                         + " " + MapsUtils.toString(filteredLocation));
                 navMap.updateLocation(filteredLocation);
             }

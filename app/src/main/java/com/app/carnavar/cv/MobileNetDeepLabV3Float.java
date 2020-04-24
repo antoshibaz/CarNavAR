@@ -1,6 +1,5 @@
 package com.app.carnavar.cv;
 
-import android.app.Activity;
 import android.content.Context;
 
 import java.io.IOException;

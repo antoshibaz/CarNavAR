@@ -69,7 +69,7 @@ public class LibsUtils {
             return session.getSupportedCameraConfigs(cameraConfigFilter);
         }
 
-        private String getCameraIntrinsics(Frame frame, boolean intrinsicTypeFlag) {
+        public static String getCameraIntrinsics(Frame frame, boolean intrinsicTypeFlag) {
             Camera camera = frame.getCamera();
             CameraIntrinsics intrinsics =
                     intrinsicTypeFlag ? camera.getTextureIntrinsics() : camera.getImageIntrinsics();

@@ -1,12 +1,10 @@
 package com.app.carnavar.cv;
 
-import android.app.Activity;
 import android.content.Context;
 import android.content.res.AssetFileDescriptor;
 import android.graphics.Bitmap;
 import android.util.Log;
 
-import org.tensorflow.lite.Delegate;
 import org.tensorflow.lite.Interpreter;
 import org.tensorflow.lite.gpu.GpuDelegate;
 
@@ -78,6 +76,10 @@ public abstract class TFLiteImageSemanticSegmenter {
     public TFLiteImageSemanticSegmenter(Context activity) throws IOException {
         tfLiteModel = loadModelFile(activity);
         labelList = loadLabelList(activity);
+        gpuDelegate = new GpuDelegate();
+        tfLiteOptions.addDelegate(gpuDelegate);
+        tfLiteOptions.setNumThreads(4);
+        tfLiteOptions.setUseNNAPI(false);
         tfLiteInterpreter = new Interpreter(tfLiteModel, tfLiteOptions);
 
         inputImgData =

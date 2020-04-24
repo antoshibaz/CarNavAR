@@ -12,7 +12,7 @@ public abstract class VirtualSensor {
     private List<SensorListener> sensorListeners = new ArrayList<>();
 
     protected float[] rawValues = null;
-    protected int sampleRatePeriodTimeMicros = 50_000; // SensorManager.SENSOR_DELAY_GAME=20000 SENSOR_DELAY_FASTEST=0:
+    protected int sampleRatePeriodTimeMicros = 100_000; // SensorManager.SENSOR_DELAY_GAME=20000 SENSOR_DELAY_FASTEST=0:
 
     protected Handler handler = null;
 

@@ -8,13 +8,13 @@ import com.app.carnavar.utils.maps.MapsUtils;
 
 public class LocationFilters {
 
-    public static class GeoHeuristicFilter {
+    public static class GeoLocationHeuristicFilter {
 
-        private static final String TAG = GeoHeuristicFilter.class.getSimpleName();
+        private static final String TAG = GeoLocationHeuristicFilter.class.getSimpleName();
 
         private float minUpdateDistanceMeters = 5.0f;
-        private long ageUpdateTimeMillis = 30 * 1000; // | 30 sec
-        private float speedForBearingStability = 3.0f; // m/s
+        private long ageUpdateTimeMillis = 15 * 1000; // | 30 sec
+        private float speedForBearingStability = 2.0f; // m/s
         private float distanceAccuracyLimit = 50; // meters
         private float minSpeed = 3000f / (60 * 60); // m/sec | 3 km/h maybe for pedestrian
         private float maxSpeed = 200000f / (60 * 60); // m/sec | 150 km/h maybe for car
@@ -22,11 +22,16 @@ public class LocationFilters {
         private float deltaAcc = 5.0f;
 
         private long bearingStabilityCounter = 0;
-        private long bearingStabilityCountThresh = 6;
+        private long bearingStabilityCountThresh = 3;
         private long bearingStabilityPatienceCounter = 0;
-        private long bearingStabilityPatienceCountThresh = 3;
+        private long bearingStabilityPatienceCountThresh = 2;
 
         private Location lastBestLocation;
+
+        public boolean isBearingIsStable() {
+            return bearingIsStable;
+        }
+
         private boolean bearingIsStable = false;
         private boolean bearingIsEstablished = false;
 
@@ -140,7 +145,7 @@ public class LocationFilters {
                         bearingIsEstablished = true;
                     }
                 } else {
-                    bearingStabilityPatienceCounter -= 2;
+                    bearingStabilityPatienceCounter -= 1;
                     if (bearingStabilityPatienceCounter < 0)
                         bearingStabilityPatienceCounter = 0;
                 }

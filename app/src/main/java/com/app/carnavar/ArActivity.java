@@ -2,31 +2,32 @@ package com.app.carnavar;
 
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.location.Location;
 import android.media.Image;
-import android.media.ImageReader;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.util.Log;
+import android.util.Size;
 import android.view.View;
 import android.widget.TextView;
 
+import com.app.carnavar.ar.ArDrawer;
 import com.app.carnavar.ar.arcorelocation.LocationMarker;
 import com.app.carnavar.ar.arcorelocation.LocationScene;
 import com.app.carnavar.cv.CvInferenceThread;
-import com.app.carnavar.hal.calib.MagnetHeadingCalibrator;
 import com.app.carnavar.hal.sensors.SensorTypes;
 import com.app.carnavar.maps.NavMap;
 import com.app.carnavar.services.ServicesRepository;
 import com.app.carnavar.services.gpsimu.GpsImuService;
 import com.app.carnavar.services.gpsimu.GpsImuServiceInterfaces;
+import com.app.carnavar.ui.OverlayView;
 import com.app.carnavar.utils.android.DisplayMessagesUtils;
 import com.app.carnavar.utils.android.DisplayUtils;
 import com.app.carnavar.utils.android.LibsUtils;
 import com.app.carnavar.utils.filters.LocationFilters;
-import com.app.carnavar.utils.filters.SmoothingFilters;
+import com.app.carnavar.utils.maps.CoordinatesUtils;
 import com.app.carnavar.utils.maps.MapsUtils;
 import com.google.ar.core.Frame;
 import com.google.ar.core.Session;
@@ -62,89 +63,104 @@ public class ArActivity extends AppCompatActivity {
 
     private Session arCoreSession;
     private ArSceneView arSceneView;
-
+    private SharedCamera sharedCamera;
     // ARCore-Location scene world
     private LocationScene locationScene;
-
     // Renderables objects (views, models and other)
     private ViewRenderable poiViewRenderable;
     private Renderable arrowRenderable;
 
     private MapView navMapView;
     private NavMap navMap;
-
-    private SharedCamera sharedCamera;
-    private ImageReader imageReader;
+    private OverlayView overlayView;
 
     private LocationMarker targetDestinationMarker;
+    private Location lastLocation;
+    private float[] currentOrientationAngles = new float[3];
 
-    private LocationFilters.GeoHeuristicFilter geoHeuristicFilter = new LocationFilters.GeoHeuristicFilter();
-
-    private SmoothingFilters.LowPassFilter poseFilter;
-    private static final double POSE_FILTERING_FACTOR = 0.1;
+    private LocationFilters.GeoLocationHeuristicFilter geoLocationHeuristicFilter = new LocationFilters.GeoLocationHeuristicFilter();
 
     private CvInferenceThread cvInferenceThread;
 
-    private MagnetHeadingCalibrator magnetHeadingCalibrator = new MagnetHeadingCalibrator(15,
-            new MagnetHeadingCalibrator.CalibStatusCallback() {
-                @Override
-                public void samplesIsCollected() {
-                    magnetHeadingCalibrator.calib();
-                }
-
-                @Override
-                public void calibIsSuccessCompleted() {
-                    if (!calibIsOk) {
-                        calibIsOk = true;
-                    }
-                }
-            });
-    float[] magnetValues = new float[3];
-    private boolean calibIsOk = false;
-
-    private float[] currentPoseAngles;
-    private Location lastLocation;
-
-    private boolean testCalibIsRun = false;
-
-    private void testCalib() {
-        new Handler().postDelayed(() -> {
-            magnetHeadingCalibrator.addSample(lastLocation, new double[]{magnetValues[0], magnetValues[1]});
-            testCalib();
-        }, 500);
-    }
-
     private GpsImuServiceInterfaces.ImuListener imuListener = (values, sensorType, timeNanos) -> {
         if (sensorType == SensorTypes.ORIENTATION_ROTATION_ANGLES) {
-            currentPoseAngles = poseFilter.processArray(values, (float) POSE_FILTERING_FACTOR);
-
-            if (navMap != null && navMapInitSuccess) {
-                navMap.updateOrientation(currentPoseAngles[0]);
-            }
-
-            if (locationScene != null) {
-                locationScene.updateBearing(currentPoseAngles[0]);
-            }
-            Log.d(TAG, " ar_bearing=" + currentPoseAngles[0]);
+            updateForOrientation(values);
         } else if (sensorType == SensorTypes.MAGNETIC_FIELD) {
-            System.arraycopy(values, 0, magnetValues, 0, values.length);
-
-//            if (calibIsOk) {
-//                double calibBearing = magnetHeadingCalibrator.getCalibHeading(new double[]{magnetValues[0], magnetValues[1]},
-//                        true);
-//                Log.d(TAG, "calib_bearing=" + calibBearing);
-//            }
+            //System.arraycopy(values, 0, magnetValues, 0, values.length);
+        } else if (sensorType == SensorTypes.ORIENTATION_ROTATION_MATRIX) {
+            //System.arraycopy(values, 0, currentPoseRotMatrix, 0, values.length);
         }
     };
 
-    private GpsImuServiceInterfaces.GpsLocationListener gpsLocationListener = location -> {
-        Location filteredLocation = geoHeuristicFilter.process(location);
-        lastLocation = location;
-        Log.d(TAG, "Filtered location -> bearIsEstablished=" + geoHeuristicFilter.bearingIsEstablished()
-                + " " + MapsUtils.toString(filteredLocation));
+    private GpsImuServiceInterfaces.GpsLocationListener gpsLocationListener = this::updateForLocation;
+
+    private float deltaBearing = 0;
+    private int gpsBearingEstablishmentFactor = 0;
+    private float calibratedBearing = 0;
+
+    private void updateForOrientation(float[] orientationAngles) {
+        float prevOrientationBearing = currentOrientationAngles[0];
+        System.arraycopy(orientationAngles, 0, currentOrientationAngles, 0, orientationAngles.length);
+        float orientationBearing = currentOrientationAngles[0];
+        float orientationDiff = Math.abs(CoordinatesUtils.getMinSignedAnglesDiff(prevOrientationBearing,
+                orientationBearing));
+//        boolean updRequest = false;
+//        if (orientationDiff >= 0.1f) { // rotation patience - throttling
+//            updRequest = true;
+//        }
+
+        int gpsBearing = 0;
+        if (lastLocation != null && geoLocationHeuristicFilter.bearingIsEstablished()) {
+            gpsBearingEstablishmentFactor++;
+            if (gpsBearingEstablishmentFactor > 1) { // bearing establishment patience
+                gpsBearing = (int) lastLocation.getBearing();
+                float bearingDiff = CoordinatesUtils.getMinSignedAnglesDiff(orientationBearing, gpsBearing);
+                if (Math.abs(bearingDiff) >= 5) { // abs error between sensor and gps bearings
+                    deltaBearing = bearingDiff;
+                }
+            }
+        } else {
+            gpsBearingEstablishmentFactor = 0;
+        }
+
+        calibratedBearing = (int) (((orientationBearing + deltaBearing) + 360) % 360);
 
         if (navMap != null && navMapInitSuccess) {
-            navMap.updateLocation(filteredLocation);
+            if (calibratedBearing == 0) {
+                navMap.updateOrientation(360);
+            } else {
+                navMap.updateOrientation(calibratedBearing);
+            }
+        }
+
+        if (locationScene != null) {
+            float arSceneBearDiff = CoordinatesUtils.getMinSignedAnglesDiff((int) locationScene.getCurrentBearing(),
+                    calibratedBearing); // check rot in locationScene
+            locationScene.updateBearing(calibratedBearing);
+        }
+
+        Log.d(TAG, "diff=" + orientationDiff + " raw_bear=" + orientationBearing + " gps_bear=" + gpsBearing +
+                " ar_calib_bear=" + calibratedBearing + " delta_bear=" + deltaBearing);
+        if (arSceneView != null) {
+            Log.d("cam", "" + arSceneView.getScene().getCamera().getWorldPosition().y);
+        }
+    }
+
+    private void updateForLocation(Location location) {
+        Location filteredLocation;
+        if (lastLocation == null) { // cold start: first location gives low precision
+            filteredLocation = location;
+        } else {
+            filteredLocation = geoLocationHeuristicFilter.process(location);
+        }
+
+        if (navMap != null && navMapInitSuccess) {
+            if (filteredLocation != lastLocation || filteredLocation != navMap.getLastLocation()) {
+                Location updLocation = new Location(filteredLocation);
+                updLocation.setBearing(calibratedBearing == 0 ? 360f : calibratedBearing);
+                navMap.updateLocation(filteredLocation);
+            }
+
             if (navMap.getCurrentDestinationPoint() == null) {
                 // get data from previous activity
                 Intent intent = getIntent();
@@ -155,19 +171,17 @@ public class ArActivity extends AppCompatActivity {
             }
         }
 
-        if (locationScene != null) {
+        if (locationScene != null && (locationScene.getCurrentLocation() != filteredLocation
+                || filteredLocation != lastLocation)) {
             locationScene.updateGpsLocation(filteredLocation);
         }
 
-//        if (!testCalibIsRun) {
-//            testCalib();
-//            testCalibIsRun = true;
-//        }
-    };
+        lastLocation = filteredLocation;
+        Log.d(TAG, "Filtered location -> bearStab" + geoLocationHeuristicFilter.isBearingIsStable() + " gpsBearEstablished=" + geoLocationHeuristicFilter.bearingIsEstablished()
+                + " " + MapsUtils.toString(lastLocation));
+    }
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+    private void init(Bundle savedInstanceState) {
         // check arcore availability
         try {
             LibsUtils.ARCore.checkAvailabilityAndInstallIfNeeded(this);
@@ -177,36 +191,14 @@ public class ArActivity extends AppCompatActivity {
             DisplayMessagesUtils.showToastMsg(this, excMsg);
             finish();
         }
-
         setContentView(R.layout.activity_ar);
-        poseFilter = new SmoothingFilters.LowPassFilter();
 
-        // create arcore scene view and custom session
+        // create arcore session and ar scene view
         arSceneView = findViewById(R.id.ar_scene_view);
         try {
             arCoreSession = LibsUtils.ARCore.createARCoreSession(this, true);
             sharedCamera = arCoreSession.getSharedCamera();
             Log.d(TAG, "Selected ARCore camera -> " + LibsUtils.ARCore.handleCameraConfig(arCoreSession.getCameraConfig()));
-            // TODO: shared camera image capturing
-            // When ARCore is running, make sure it also updates our CPU image surface.
-            //    sharedCamera.setAppSurfaces(this.cameraId, Arrays.asList(cpuImageReader.getSurface()));
-            // Use the currently configured CPU image size.
-//            Size desiredImageSize = arCoreSession.getCameraConfig().getImageSize();
-//            imageReader = ImageReader.newInstance(
-//                            desiredImageSize.getWidth(),
-//                            desiredImageSize.getHeight(),
-//                            ImageFormat.YUV_420_888,
-//                            2);
-//            imageReader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
-//                @Override
-//                public void onImageAvailable(ImageReader reader) {
-//                    Image image = imageReader.acquireLatestImage();
-//                    image.close();
-//                    Log.d(TAG, "Camera image captured");
-//                }
-//            }, null);
-//            sharedCamera.setAppSurfaces(arCoreSession.getCameraConfig().getCameraId(),
-//                    Arrays.asList(imageReader.getSurface()));
         } catch (UnavailableException e) {
             String excMsg = LibsUtils.ARCore.handleException(e);
             Log.e(TAG, excMsg);
@@ -215,41 +207,16 @@ public class ArActivity extends AppCompatActivity {
         }
         arSceneView.setupSession(arCoreSession);
 
-        // init maps
-        navMapView = findViewById(R.id.miniNavMapView);
-        navMapView.onCreate(savedInstanceState);
-        navMap = new NavMap(navMapView, getString(R.string.mapbox_map_style_streets));
-        navMap.setNavMapInitializedListener(() -> {
-            navMapInitSuccess = true;
-            Log.d(TAG, "NavMap is success loaded");
-        });
-        navMap.setDestinationMarkerChangedListener((newDstPoint, pointFeatures) -> {
-            navMap.updateRoutesFromMyLocationTo(newDstPoint);
-            if (hasRenderersFinishedLoading) {
-                LocationMarker newDestinationMarker = createDestinationPoiMarker(newDstPoint.latitude(),
-                        newDstPoint.longitude());
-                if (locationScene != null) {
-                    // call to render ar now
-                    detachLocationMarkerFromScene(targetDestinationMarker);
-                    targetDestinationMarker = newDestinationMarker;
-                    attachLocationMarkerToScene(targetDestinationMarker);
-                } else {
-                    // put to queue for rendering
-                    targetDestinationMarker = newDestinationMarker;
-                }
-            }
-        });
-        navMap.setUpdateRoutesListener((currentTargetRoute, currentAvailableRoutes) -> navMap.trackingMyLocation(250));
-
+        // Create and init renderables objects
         // Build a renderable from a 2D View
         CompletableFuture<ViewRenderable> poiLayout =
                 ViewRenderable.builder()
                         .setView(this, R.layout.poi_ar_view)
                         .build();
+        // Build a renderable for a 3D Model
         CompletableFuture<ModelRenderable> arrowModel = ModelRenderable.builder()
                 .setSource(this, Uri.parse("3dmodels/RLab-arrow.sfb"))
                 .build();
-
         CompletableFuture.allOf(
                 poiLayout, arrowModel)
                 .handle(
@@ -273,90 +240,177 @@ public class ArActivity extends AppCompatActivity {
                             return null;
                         });
 
-        arSceneView.getPlaneRenderer().setEnabled(false); // disable plane renderer as it not use in this scenario
-        // Set an update listener on the Scene
-        arSceneView
-                .getScene()
-                .addOnUpdateListener(
-                        frameTime -> {
-                            if (!hasRenderersFinishedLoading) {
-                                return;
-                            }
+        // disable plane renderer as it not use in this scenario
+        arSceneView.getPlaneRenderer().setEnabled(false);
+        // Set an update listener looper on the Scene
+        arSceneView.getScene().addOnUpdateListener(frameTime -> arUpdateLooper());
 
-                            if (locationScene == null) {
-                                // If our locationScene object hasn't been setup yet, this is a good time to do it
-                                // We know that here, the AR components have been initiated
-                                locationScene = new LocationScene(this, arSceneView);
-                                // speed 150 km/h = 42 m/s | refresh - 10-50ms
-                                locationScene.refreshAnchors();
-                                //locationScene.setAnchorRefreshInterval(30);
-                                locationScene.setRefreshAnchorsAsLocationChanges(true);
+        // init maps
+        navMapView = findViewById(R.id.miniNavMapView);
+        navMapView.onCreate(savedInstanceState);
+        navMap = new NavMap(navMapView, getString(R.string.mapbox_map_style_streets));
+        navMap.setNavMapInitializedListener(() -> {
+            navMapInitSuccess = true;
+            Log.d(TAG, "NavMap is success loaded");
+//            Location mockMyLoc = new Location("");
+//            mockMyLoc.setLatitude(54.772165);
+//            mockMyLoc.setLongitude(31.684625);
+//            gpsLocationListener.onGpsLocationReturned(mockMyLoc);
+        });
+        navMap.setDestinationMarkerChangedListener((newDstPoint, pointFeatures) -> {
+            navMap.updateRoutesFromMyLocationTo(newDstPoint);
+            if (hasRenderersFinishedLoading) {
+                LocationMarker newDestinationMarker = createDestinationPoiMarker(newDstPoint.latitude(),
+                        newDstPoint.longitude());
+                if (locationScene != null) {
+                    // call to render ar now
+                    detachLocationMarkerFromScene(targetDestinationMarker);
+                    targetDestinationMarker = newDestinationMarker;
+                    attachLocationMarkerToScene(targetDestinationMarker);
+                    Log.d(TAG, "attaching");
+                } else {
+                    // put to queue for rendering
+                    targetDestinationMarker = newDestinationMarker;
+                }
+            }
+        });
+        navMap.setUpdateRoutesListener((currentTargetRoute, currentAvailableRoutes) -> navMap.trackingMyLocation(150));
 
-                                // Now lets create our location markers
-                                if (targetDestinationMarker != null
-                                        && !locationScene.mLocationMarkers.contains(targetDestinationMarker)) {
-                                    attachLocationMarkerToScene(targetDestinationMarker);
-                                }
+        overlayView = findViewById(R.id.overlay);
+        overlayView.addDrawCallback(this::overlayUpdateLooper);
+    }
 
-//                                double[] latLng = MapsUtils.getDstLocationByBearingAndDistance(dstPoiMarker[1], dstPoiMarker[0], 180, 100);
-//                                LocationMarker arrowNode = new LocationMarker(latLng[1], latLng[0], getArrowModelNode());
-//                                arrowNode.setRenderEvent(new LocationNodeRender() {
-//                                    @Override
-//                                    public void render(LocationNode node) {
-////                                        for (Node n : node.getChildren()) {
-////                                            n.setLocalRotation(Quaternion.axisAngle(new Vector3(0f, 1f, 0f), 90f));
-////                                        }
-//                                    }
-//                                });
-//                                locationScene.mLocationMarkers.add(arrowNode);
-                            }
+    private void updateOverlay(long updateTimeInterval) {
+        new Handler().postDelayed(() -> {
+            if (overlayView != null && hasRenderersFinishedLoading && navMapInitSuccess) {
+                overlayView.postInvalidate();
+            }
+            updateOverlay(updateTimeInterval);
+        }, updateTimeInterval);
+    }
 
-                            Frame frame = arSceneView.getArFrame();
-                            if (frame == null) {
-                                return;
-                            }
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        init(savedInstanceState);
+        updateOverlay(33L);
+    }
 
-                            // image analysis
-                            try (Image image = frame.acquireCameraImage()) {
-//                                Log.d(TAG, "" + image.getHeight() + "x" + image.getWidth());
-                                if (cvInferenceThread != null) {
-                                    cvInferenceThread.processFrame(image);
-                                }
-                            } catch (NotYetAvailableException e) {
-                            }
+    private void arUpdateLooper() {
+        if (!hasRenderersFinishedLoading) {
+            return;
+        }
 
-//                            Pose pose1 = arSceneView.getArFrame().getAndroidSensorPose();
-////                            Pose pose2 = arSceneView.getArFrame().getCamera().getPose();
-////                            Pose pose3 = arSceneView.getArFrame().getCamera().getDisplayOrientedPose();
-//                            float[] rotVec1 = pose1.getRotationQuaternion();
-//                            float[] rotMat1 = new float[9]; // or pose1.toMatrix(...)
-//                            SensorManager.getRotationMatrixFromVector(rotMat1, rotVec1);
-//                            float[] angles1 = new float[3];
-//                            SensorManager.getOrientation(rotMat1, angles1);
-//                            angles1[0] = ((float) Math.toDegrees(angles1[0]) + 360f) % 360f;
-//                            angles1[1] = (float) Math.toDegrees(angles1[1]);
-//                            angles1[2] = (float) Math.toDegrees(angles1[2]);
-//                            if (loadingMessageSnackbar != null) {
-//                                loadingMessageSnackbar.setText("1:" + Math.round(angles1[0]) + " 2:" + Math.round(angles1[1]) + " 3:" + Math.round(angles1[2]));
-//                            }
-//                            arSceneView.getScene().getCamera().getWorldPosition()
+        if (locationScene == null) {
+            // If our locationScene object hasn't been setup yet, this is a good time to do it
+            // We know that here, the AR components have been initiated
+            locationScene = new LocationScene(this, arSceneView);
+            // speed 150 km/h = 42 m/s | refresh - 10-50ms
+            locationScene.refreshAnchors();
+            //locationScene.setAnchorRefreshInterval(30);
+            locationScene.setRefreshAnchorsAsLocationChanges(true);
+
+            // Now lets create our location markers
+            if (targetDestinationMarker != null
+                    && !locationScene.mLocationMarkers.contains(targetDestinationMarker)) {
+                attachLocationMarkerToScene(targetDestinationMarker);
+                Log.d(TAG, "attaching");
+            }
+
+//            double[] latLng = MapsUtils.getDstLocationByBearingAndDistance(dstPoiMarker[1], dstPoiMarker[0], 180, 100);
+//            LocationMarker arrowNode = new LocationMarker(latLng[1], latLng[0], getArrowModelNode());
+//            arrowNode.setRenderEvent(new LocationNodeRender() {
+//                @Override
+//                public void render(LocationNode node) {
+//                    for (Node n : node.getChildren()) {
+//                        n.setLocalRotation(Quaternion.axisAngle(new Vector3(0f, 1f, 0f), 90f));
+//                    }
+//                }
+//            });
+//            locationScene.mLocationMarkers.add(arrowNode);
+        }
+
+        Frame frame = arSceneView.getArFrame();
+        if (frame == null) {
+            return;
+        }
+
+        // image analysis
+        try (Image image = frame.acquireCameraImage()) {
+            if (cvInferenceThread != null) {
+                cvInferenceThread.processFrame(image);
+            }
+        } catch (NotYetAvailableException e) {
+        }
+
+//        frame.getCamera().getDisplayOrientedPose() getProjectionMatrix() getViewMatrix()
+//        Pose pose1 = arSceneView.getArFrame().getAndroidSensorPose();
+//        Pose pose2 = arSceneView.getArFrame().getCamera().getPose();
+//        Pose pose3 = arSceneView.getArFrame().getCamera().getDisplayOrientedPose();
+//        float[] rotVec1 = pose1.getRotationQuaternion();
+//        float[] rotMat1 = new float[9]; // or pose1.toMatrix(...)
+//        SensorManager.getRotationMatrixFromVector(rotMat1, rotVec1);
+//        float[] angles1 = new float[3];
+//        SensorManager.getOrientation(rotMat1, angles1);
+//        angles1[0] = ((float) Math.toDegrees(angles1[0]) + 360f) % 360f;
+//        angles1[1] = (float) Math.toDegrees(angles1[1]);
+//        angles1[2] = (float) Math.toDegrees(angles1[2]);
+//        if (loadingMessageSnackbar != null) {
+//            loadingMessageSnackbar.setText("1:" + Math.round(angles1[0]) + " 2:" + Math.round(angles1[1]) + " 3:" + Math.round(angles1[2]));
+//        }
+//        arSceneView.getScene().getCamera().getWorldPosition();
 
 
-                            if (frame.getCamera().getTrackingState() != TrackingState.TRACKING) {
-                                return;
-                            }
+        if (frame.getCamera().getTrackingState() != TrackingState.TRACKING) {
+            return;
+        }
 
-                            if (locationScene != null) {
-                                locationScene.processFrame(frame);
-                            }
+        // planes detecting
+//        for (Plane plane : frame.getUpdatedTrackables(Plane.class)) {
+//            if (plane.getTrackingState() == TrackingState.TRACKING) {
+//                hideLoadingMessage();
+//            }
+//        }
 
-                            // planes detecting
-//                            for (Plane plane : frame.getUpdatedTrackables(Plane.class)) {
-//                                if (plane.getTrackingState() == TrackingState.TRACKING) {
-//                                    hideLoadingMessage();
-//                                }
-//                            }
-                        });
+        if (locationScene != null) {
+            locationScene.processFrame(frame);
+        }
+    }
+
+    private void overlayUpdateLooper(Canvas canvas) {
+//        if (segImg != null) {
+//            Bitmap bitmap = Bitmap.createScaledBitmap(segImg, canvas.getWidth(), canvas.getHeight(), true);
+//            canvas.drawBitmap(bitmap, 0, 0, new Paint(Paint.FILTER_BITMAP_FLAG));
+//        }
+
+        if (lastLocation != null && targetDestinationMarker != null
+                && targetDestinationMarker.anchorNode != null
+                && targetDestinationMarker.anchorNode.getAnchor() != null) {
+            Location dstLoc = new Location("");
+            dstLoc.setLongitude(targetDestinationMarker.longitude);
+            dstLoc.setLatitude(targetDestinationMarker.latitude);
+            //dstLoc.setAltitude(0);
+
+            Size imageSize = new Size(arCoreSession.getCameraConfig().getImageSize().getWidth(),
+                    arCoreSession.getCameraConfig().getImageSize().getWidth());
+            Size screenSize = new Size(canvas.getWidth(), canvas.getHeight());
+            float[] worldCoordsOfPoi = CoordinatesUtils.convertGpsToWorld(lastLocation, dstLoc);
+            Log.d(TAG, " east=" + worldCoordsOfPoi[0] + " north=" + worldCoordsOfPoi[1] + " up" + worldCoordsOfPoi[2]);
+
+            // Approach 1
+            Vector3 dstVec = targetDestinationMarker.anchorNode.getWorldPosition();
+            dstVec.y = -3f;
+            Vector3 screenPoiVec = CoordinatesUtils.worldToScreenPoint(dstVec,
+                    arSceneView.getScene().getCamera().getProjectionMatrix(),
+                    arSceneView.getScene().getCamera().getViewMatrix(), screenSize);
+//            Vector3 screenPoiVec = arSceneView.getScene().getCamera().worldToScreenPoint(dstVec);
+            ArDrawer.drawOverlayNavigationBeacon(screenPoiVec, canvas,
+                    targetDestinationMarker.anchorNode.getDistance(), true);
+        }
+    }
+
+    private void calcAndDrawPathPoints() {
+
     }
 
     private static LocationMarker getBaseLocationMarker(double lat, double lng, Node renderableNode) {
@@ -487,9 +541,13 @@ public class ArActivity extends AppCompatActivity {
             return;
         }
 
-        cvInferenceThread = CvInferenceThread.createAndStart(this);
-        cvInferenceThread.setInferenceCallback(inferencedImage -> {
-        });
+//        cvInferenceThread = CvInferenceThread.createAndStart(this);
+//        cvInferenceThread.setInferenceCallback(inferencedImage -> {
+//            if (overlayView != null) {
+//                segImg = inferencedImage;
+//                overlayView.postInvalidate();
+//            }
+//        });
     }
 
     /**
@@ -505,8 +563,8 @@ public class ArActivity extends AppCompatActivity {
         });
         ServicesRepository.getInstance().stopService(getApplicationContext(), GpsImuService.class);
 
-        cvInferenceThread.close();
-        cvInferenceThread = null;
+//        cvInferenceThread.close();
+//        cvInferenceThread = null;
 
         navMapView.onPause();
 

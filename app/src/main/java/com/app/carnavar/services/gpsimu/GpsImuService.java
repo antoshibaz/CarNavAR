@@ -168,28 +168,34 @@ public class GpsImuService extends Service {
     }
 
     private void shutdown() {
-        imuProviderThread.quitSafely();
-        try {
-            imuProviderThread.join();
-            imuProviderThread = null;
-        } catch (final InterruptedException e) {
-            Log.e(TAG, ImuProviderThread.TAG + " throw InterruptedException");
+        if (imuProviderThread != null) {
+            imuProviderThread.quitSafely();
+            try {
+                imuProviderThread.join();
+                imuProviderThread = null;
+            } catch (final InterruptedException e) {
+                Log.e(TAG, ImuProviderThread.TAG + " throw InterruptedException");
+            }
         }
 
-        gpsProviderThread.quitSafely();
-        try {
-            gpsProviderThread.join();
-            gpsProviderThread = null;
-        } catch (final InterruptedException e) {
-            Log.e(TAG, GpsProviderThread.TAG + " throw InterruptedException");
+        if (gpsProviderThread != null) {
+            gpsProviderThread.quitSafely();
+            try {
+                gpsProviderThread.join();
+                gpsProviderThread = null;
+            } catch (final InterruptedException e) {
+                Log.e(TAG, GpsProviderThread.TAG + " throw InterruptedException");
+            }
         }
 
-        gpsImuFusionLocationThread.quitSafely();
-        try {
-            gpsImuFusionLocationThread.join();
-            gpsImuFusionLocationThread = null;
-        } catch (final InterruptedException e) {
-            Log.e(TAG, GpsImuFusionLocationThread.TAG + " throw InterruptedException");
+        if (gpsImuFusionLocationThread != null) {
+            gpsImuFusionLocationThread.quitSafely();
+            try {
+                gpsImuFusionLocationThread.join();
+                gpsImuFusionLocationThread = null;
+            } catch (final InterruptedException e) {
+                Log.e(TAG, GpsImuFusionLocationThread.TAG + " throw InterruptedException");
+            }
         }
     }
 

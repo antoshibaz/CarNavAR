@@ -63,7 +63,7 @@ public class FusionImuMotionEngine extends VirtualSensor {
 
     // for device orientation in remapped coordinate system (sensors system -> remapped sensor system -> world system)
     private MatrixF4x4 currentDeviceOrientationRotationMatrix = new MatrixF4x4();
-    private float[] currentDeviceOrientationAngles = new float[]{-1, 0, 0};
+    private float[] currentDeviceOrientationAngles = new float[]{0, 0, 0};
 
     private GeomagneticField geomagneticField;
     private boolean useMagnetDeclinationForOrientation = true;
@@ -72,15 +72,21 @@ public class FusionImuMotionEngine extends VirtualSensor {
     private SmoothingFilters.LowPassFilter acceleratFilter;
     private static final float ACCELERATIONS_FILTERING_FACTOR = 0.75f;
     private SmoothingFilters.LowPassFilter gyroFilter;
-    private static final float GYRO_FILTERING_FACTOR = 0.99f;
+    private static final float GYRO_FILTERING_FACTOR = 0.9f;
     private SmoothingFilters.LowPassFilter magnetFilter;
     private static final float MAGNETIC_FILTERING_FACTOR = 0.3f;
+    private SmoothingFilters.LowPassFilter orientationFilter = new SmoothingFilters.LowPassFilter();
+    private static final float ORIENTATION_FILTERING_FACTOR = 0.1f;
+
+    private float[] orientationRotMatFromVec = new float[16];
+    private float[] orientationRotMat = new float[16];
 
     private SensorManager sensorManager;
     private WindowManager windowManager;
 
     public FusionImuMotionEngine(Context context) {
         super();
+        rawValues = new float[4];
         sensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
         windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
         accelerometer = new Accelerometer(context);
@@ -89,6 +95,8 @@ public class FusionImuMotionEngine extends VirtualSensor {
         gyroscope.addSensorValuesCaptureListener(sensorsListener);
         androidOrientationRotationVector = new RotationVector(context);
         androidOrientationRotationVector.addSensorValuesCaptureListener(sensorsListener);
+//        magnetometer = new Magnetometer(context, handler);
+//        magnetometer.addSensorValuesCaptureListener(sensorsListener);
 
         acceleratFilter = new SmoothingFilters.LowPassFilter();
         gyroFilter = new SmoothingFilters.LowPassFilter();
@@ -97,6 +105,7 @@ public class FusionImuMotionEngine extends VirtualSensor {
 
     public FusionImuMotionEngine(Context context, Handler handler) {
         super(handler);
+        rawValues = new float[4];
         sensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
         windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
         accelerometer = new Accelerometer(context, handler);
@@ -105,8 +114,8 @@ public class FusionImuMotionEngine extends VirtualSensor {
         gyroscope.addSensorValuesCaptureListener(sensorsListener);
         androidOrientationRotationVector = new RotationVector(context, handler);
         androidOrientationRotationVector.addSensorValuesCaptureListener(sensorsListener);
-        magnetometer = new Magnetometer(context, handler);
-        magnetometer.addSensorValuesCaptureListener(sensorsListener);
+//        magnetometer = new Magnetometer(context, handler);
+//        magnetometer.addSensorValuesCaptureListener(sensorsListener);
 
         acceleratFilter = new SmoothingFilters.LowPassFilter();
         gyroFilter = new SmoothingFilters.LowPassFilter();
@@ -128,12 +137,13 @@ public class FusionImuMotionEngine extends VirtualSensor {
     private SensorListener sensorsListener = new SensorListener() {
         @Override
         public void onSensorValuesCaptured(float[] values, int sensorType, long timeNanos) {
+            System.arraycopy(values, 0, rawValues, 0, values.length);
             switch (sensorType) {
                 case SensorTypes.FULL_ACCELERATION: { // accelerometer values (linear + gravity)
                     if (orientationInitialized) {
                         android.opengl.Matrix.invertM(fusionDeviceOrientationRotationMatrixInv.matrix,
                                 0, fusionDeviceOrientationRotationMatrix.matrix, 0);
-                        processAccelerometer(acceleratFilter.processArray(values, ACCELERATIONS_FILTERING_FACTOR),
+                        processAccelerometer(acceleratFilter.processArray(rawValues, ACCELERATIONS_FILTERING_FACTOR),
                                 timeNanos);
                         android.opengl.Matrix.multiplyMV(nonRemappedAbsAccelerations, 0,
                                 fusionDeviceOrientationRotationMatrixInv.matrix, 0,
@@ -159,9 +169,10 @@ public class FusionImuMotionEngine extends VirtualSensor {
 
                 case SensorTypes.GYROSCOPE_ANGLE_VELOCITY: { // gyroscope values
                     if (timeNanos != 0) {
-                        processGyroscopeFusion(gyroFilter.processArray(values, GYRO_FILTERING_FACTOR), timeNanos);
+                        processGyroscopeFusion(gyroFilter.processArray(rawValues, GYRO_FILTERING_FACTOR), timeNanos);
                         if (!orientationInitialized) orientationInitialized = true;
-                        notifyAllSensorValuesCaptureListeners(currentDeviceOrientationAngles, SensorTypes.ORIENTATION_ROTATION_ANGLES,
+                        notifyAllSensorValuesCaptureListeners(currentDeviceOrientationAngles,
+                                SensorTypes.ORIENTATION_ROTATION_ANGLES,
                                 TimeUtils.currentAndroidSystemTimeNanos());
                         Log.d(TAG, " bearing=" + currentDeviceOrientationAngles[0]);
                     }
@@ -170,7 +181,7 @@ public class FusionImuMotionEngine extends VirtualSensor {
 
                 case SensorTypes.ORIENTATION_ROTATION_VECTOR: { // orientation rotation vector values (accelerometer + magnetometer android native fusion)
                     // get orientation rotation quaternion
-                    SensorManager.getQuaternionFromVector(tmpOrientationQuaternionValues, values);
+                    SensorManager.getQuaternionFromVector(tmpOrientationQuaternionValues, rawValues);
                     orientationRotationVectorQuaternion.setXYZW(tmpOrientationQuaternionValues[1],
                             tmpOrientationQuaternionValues[2],
                             tmpOrientationQuaternionValues[3],
@@ -180,11 +191,38 @@ public class FusionImuMotionEngine extends VirtualSensor {
                         gyroOrientationQuaternion.set(orientationRotationVectorQuaternion);
                         gyroOrientationInitialised = true;
                     }
+
+//                    SensorManager.getRotationMatrixFromVector(orientationRotMatFromVec, rawValues);
+//                    switch (windowManager.getDefaultDisplay().getRotation()) {
+//                        case Surface.ROTATION_90:
+//                            remapCoordinateSystem(orientationRotMatFromVec,
+//                                    AXIS_Y,
+//                                    AXIS_MINUS_X, orientationRotMat);
+//                            break;
+//                        case Surface.ROTATION_270:
+//                            remapCoordinateSystem(orientationRotMatFromVec,
+//                                    AXIS_MINUS_Y,
+//                                    AXIS_X, orientationRotMat);
+//                            break;
+//                        case Surface.ROTATION_180:
+//                            remapCoordinateSystem(orientationRotMatFromVec,
+//                                    AXIS_MINUS_X, AXIS_MINUS_Y,
+//                                    orientationRotMat);
+//                            break;
+//                        default:
+//                            remapCoordinateSystem(orientationRotMatFromVec,
+//                                    AXIS_X, AXIS_Y,
+//                                    orientationRotMat);
+//                            break;
+//                    }
+//                    notifyAllSensorValuesCaptureListeners(fusionDeviceOrientationRotationMatrix.matrix,
+//                            SensorTypes.ORIENTATION_ROTATION_MATRIX,
+//                            TimeUtils.currentAndroidSystemTimeNanos());
                     break;
                 }
 
                 case SensorTypes.MAGNETIC_FIELD: {
-                    float[] magVals = magnetFilter.processArray(values, MAGNETIC_FILTERING_FACTOR);
+//                    float[] magVals = magnetFilter.processArray(rawValues, MAGNETIC_FILTERING_FACTOR);
 //                    notifyAllSensorValuesCaptureListeners(magVals, SensorTypes.MAGNETIC_FIELD,
 //                            TimeUtils.currentAndroidSystemTimeNanos());
 //                    processMagnetometer(magVals, timeNanos);
@@ -212,32 +250,23 @@ public class FusionImuMotionEngine extends VirtualSensor {
         gravity[2] = (float) (SensorManager.GRAVITY_EARTH * Math.cos(pitch) * Math
                 .cos(roll));
 
-//        nonRemappedLinearAccelerations[0] = (accValues[0] - gravity[0]) / SensorManager.GRAVITY_EARTH; //x
-//        nonRemappedLinearAccelerations[1] = (accValues[1] - gravity[1]) / SensorManager.GRAVITY_EARTH; //y
-//        nonRemappedLinearAccelerations[2] = (accValues[2] - gravity[2]) / SensorManager.GRAVITY_EARTH; //z
-        nonRemappedLinearAccelerations[0] = (accValues[0] - gravity[0]); //x
-        nonRemappedLinearAccelerations[1] = (accValues[1] - gravity[1]); //y
-        nonRemappedLinearAccelerations[2] = (accValues[2] - gravity[2]); //z
+        nonRemappedLinearAccelerations[0] = (accValues[0] - gravity[0]); // / SensorManager.GRAVITY_EARTH;
+        nonRemappedLinearAccelerations[1] = (accValues[1] - gravity[1]); // / SensorManager.GRAVITY_EARTH;
+        nonRemappedLinearAccelerations[2] = (accValues[2] - gravity[2]); // / SensorManager.GRAVITY_EARTH;
 
         switch (windowManager.getDefaultDisplay().getRotation()) {
             case Surface.ROTATION_90:
             case Surface.ROTATION_270:
-//                linearAccelerations[1] = (accValues[0] - gravity[0]) / SensorManager.GRAVITY_EARTH;
-//                linearAccelerations[0] = (accValues[1] - gravity[1]) / SensorManager.GRAVITY_EARTH;
-//                linearAccelerations[2] = (accValues[2] - gravity[2]) / SensorManager.GRAVITY_EARTH;
-                linearAccelerations[1] = (accValues[0] - gravity[0]);
-                linearAccelerations[0] = (accValues[1] - gravity[1]);
-                linearAccelerations[2] = (accValues[2] - gravity[2]);
+                linearAccelerations[1] = (accValues[0] - gravity[0]); // / SensorManager.GRAVITY_EARTH;
+                linearAccelerations[0] = (accValues[1] - gravity[1]); // / SensorManager.GRAVITY_EARTH;
+                linearAccelerations[2] = (accValues[2] - gravity[2]); // / SensorManager.GRAVITY_EARTH;
                 break;
             case Surface.ROTATION_180:
             case Surface.ROTATION_0:
             default:
-//                linearAccelerations[0] = (accValues[0] - gravity[0]) / SensorManager.GRAVITY_EARTH; //x
-//                linearAccelerations[1] = (accValues[1] - gravity[1]) / SensorManager.GRAVITY_EARTH; //y
-//                linearAccelerations[2] = (accValues[2] - gravity[2]) / SensorManager.GRAVITY_EARTH; //z
-                linearAccelerations[0] = (accValues[0] - gravity[0]); //x
-                linearAccelerations[1] = (accValues[1] - gravity[1]); //y
-                linearAccelerations[2] = (accValues[2] - gravity[2]); //z
+                linearAccelerations[0] = (accValues[0] - gravity[0]); // / SensorManager.GRAVITY_EARTH; //x
+                linearAccelerations[1] = (accValues[1] - gravity[1]); // / SensorManager.GRAVITY_EARTH; //y
+                linearAccelerations[2] = (accValues[2] - gravity[2]); // / SensorManager.GRAVITY_EARTH; //z
                 break;
         }
     }
@@ -318,12 +347,7 @@ public class FusionImuMotionEngine extends VirtualSensor {
         gyroLastTimestamp = timestamp;
     }
 
-    SmoothingFilters.LowPassFilter magFilter = new SmoothingFilters.LowPassFilter();
-
     private void processMagnetometer(float[] magnetValues, long timestamp) {
-//        Log.d(TAG, "Mag:" + Arrays.toString(magnetValues) +
-//                " Mag-total:" + String.valueOf(Math.sqrt(
-//                magnetValues[0] * magnetValues[0] + magnetValues[1] * magnetValues[1] + magnetValues[2] * magnetValues[2])));
         if (geomagneticField != null) {
             float mdx = magnetValues[0];
             float mdy = magnetValues[1];
@@ -354,16 +378,14 @@ public class FusionImuMotionEngine extends VirtualSensor {
             float eTheta = (float) Math.acos((0 * mex + 0 * mey + SensorManager.GRAVITY_EARTH * mez) / (meVecL2 * eLinAccL2));
             float deltaTheta = (float) (Math.toDegrees(dTheta) - Math.toDegrees(eTheta));
 
-            magFilter.process(magDiffFactor, 0.1f);
-
-            Log.d(TAG, "mag_dev:" + mdVecL2 +
+            Log.d(TAG, "mag_device:" + mdVecL2 +
                     " mag_earth:" + meVecL2 +
                     " mag_diff_factor:" + magDiffFactor +
                     " delta_theta:" + deltaTheta);
         }
     }
 
-    // TODO: exists a problem with sometimes jumping bearing ~+-10 deg as with androidRotationVector+gyro and as androidRotationVector
+    // TODO: exists a problem with sometimes jumping bearing ~+-10-15 deg as with androidRotationVector+gyro and as androidRotationVector
     //  this watched during receive gps data
     //  smoothing rotations maybe a temporary solution
     private void updateDeviceOrientation(Quaternion newOrientationQuaternion) {
@@ -377,10 +399,7 @@ public class FusionImuMotionEngine extends VirtualSensor {
         float[] angles = new float[3];
         SensorManager.getOrientation(fusionDeviceOrientationRotationMatrix.matrix, angles);
         // angles in radians
-        fusionDeviceOrientationAngles[1] = angles[1];
-        fusionDeviceOrientationAngles[2] = angles[2];
-        fusionDeviceOrientationAngles[0] = angles[0];
-//        Log.d(TAG, " bearing2=" + (Math.toDegrees(fusionDeviceOrientationAngles[0]) + 360f) % 360f);
+        System.arraycopy(angles, 0, fusionDeviceOrientationAngles, 0, angles.length);
 
         int worldAxisForDeviceAxisX;
         int worldAxisForDeviceAxisY;
@@ -410,7 +429,7 @@ public class FusionImuMotionEngine extends VirtualSensor {
         SensorManager.remapCoordinateSystem(fusionDeviceOrientationRotationMatrix.matrix, worldAxisForDeviceAxisX,
                 worldAxisForDeviceAxisY, currentDeviceOrientationRotationMatrix.matrix);
         SensorManager.getOrientation(currentDeviceOrientationRotationMatrix.matrix, angles2);
-        System.arraycopy(angles2, 0, currentDeviceOrientationAngles, 0, currentDeviceOrientationAngles.length);
+        System.arraycopy(angles2, 0, currentDeviceOrientationAngles, 0, angles2.length);
 
         // convert angles radians to degrees
         currentDeviceOrientationAngles[1] = (float) Math.toDegrees(currentDeviceOrientationAngles[1]);
@@ -419,8 +438,8 @@ public class FusionImuMotionEngine extends VirtualSensor {
         if (geomagneticField != null && useMagnetDeclinationForOrientation) {
             currentDeviceOrientationAngles[0] += geomagneticField.getDeclination();
         }
+        orientationFilter.processArray(currentDeviceOrientationAngles, ORIENTATION_FILTERING_FACTOR);
         currentDeviceOrientationAngles[0] = (currentDeviceOrientationAngles[0] + 360f) % 360f;
-//        Log.d(TAG, " bearing2=" + currentDeviceOrientationAngles[0]);
     }
 
     @Override

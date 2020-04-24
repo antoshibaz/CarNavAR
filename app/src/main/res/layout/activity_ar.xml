@@ -13,6 +13,11 @@
         android:layout_height="match_parent"
         android:layout_gravity="top" />
 
+    <com.app.carnavar.ui.OverlayView
+        android:id="@+id/overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/miniNavMapCard"
         android:layout_width="200dp"

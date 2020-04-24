@@ -106,7 +106,7 @@ public class CvInferenceThread extends HandlerThread {
                 image.getWidth(), image.getHeight());
         if (transformMat == null) {
             transformMat = new Matrix();
-            transformMat.postRotate(-90);
+            transformMat.postRotate(90);
         }
         final Bitmap rotCamFrame = Bitmap.createBitmap(rgbCameraFrameBitmap, 0, 0, image.getWidth(), image.getHeight(),
                 transformMat, true);
@@ -205,9 +205,6 @@ public class CvInferenceThread extends HandlerThread {
         cvInferenceThread.handler.post(() -> {});
         try {
             cvInferenceThread.imageSegmenter = new MobileNetDeepLabV3Float(cvInferenceThread.context);
-            cvInferenceThread.imageSegmenter.setNumThreads(2);
-            cvInferenceThread.imageSegmenter.useCpu();
-            //cvInferenceThread.imageSegmenter.useNNAPI();
             cvInferenceThread.classes = cvInferenceThread.imageSegmenter.getClassLabels();
             cvInferenceThread.callbackHandler = new Handler(Looper.myLooper());
         } catch (IOException e) {
