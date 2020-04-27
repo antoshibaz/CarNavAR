@@ -27,7 +27,7 @@ public class FusionImuMotionEngine extends VirtualSensor {
     // gyro fusion parameters
     private static final double GYRO_EPSILON = 0.02f;
     private static final float GYRO_OUTLIER_THRESHOLD = 0.75f;
-    private static final float GYRO_DIRECT_INTERPOLATION_WEIGHT = 0.1f;
+    private static final float GYRO_DIRECT_INTERPOLATION_WEIGHT = 0.3f;
 
     // sensors
     private Accelerometer accelerometer;
@@ -76,7 +76,7 @@ public class FusionImuMotionEngine extends VirtualSensor {
     private SmoothingFilters.LowPassFilter magnetFilter;
     private static final float MAGNETIC_FILTERING_FACTOR = 0.3f;
     private SmoothingFilters.LowPassFilter orientationFilter = new SmoothingFilters.LowPassFilter();
-    private static final float ORIENTATION_FILTERING_FACTOR = 0.1f;
+    private static final float ORIENTATION_FILTERING_FACTOR = 0.3f;
 
     private float[] orientationRotMatFromVec = new float[16];
     private float[] orientationRotMat = new float[16];
@@ -134,9 +134,11 @@ public class FusionImuMotionEngine extends VirtualSensor {
         geomagneticField = new GeomagneticField((float) lat, (float) lng, (float) alt, timestampMillis);
     }
 
+    double time = 0;
     private SensorListener sensorsListener = new SensorListener() {
         @Override
         public void onSensorValuesCaptured(float[] values, int sensorType, long timeNanos) {
+            time = TimeUtils.currentAndroidSystemTimeMillis();
             System.arraycopy(values, 0, rawValues, 0, values.length);
             switch (sensorType) {
                 case SensorTypes.FULL_ACCELERATION: { // accelerometer values (linear + gravity)
@@ -228,6 +230,8 @@ public class FusionImuMotionEngine extends VirtualSensor {
 //                    processMagnetometer(magVals, timeNanos);
                 }
             }
+            time = TimeUtils.currentAndroidSystemTimeMillis() - time;
+            Log.d(TAG, "inference time=" + time);
         }
     };
 

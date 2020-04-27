@@ -13,6 +13,8 @@ import com.mapbox.android.core.location.LocationEngineCallback;
 import com.mapbox.android.core.location.LocationEngineProvider;
 import com.mapbox.android.core.location.LocationEngineRequest;
 import com.mapbox.android.core.location.LocationEngineResult;
+import com.mapbox.api.directions.v5.DirectionsCriteria;
+import com.mapbox.api.directions.v5.WalkingOptions;
 import com.mapbox.api.directions.v5.models.DirectionsResponse;
 import com.mapbox.api.directions.v5.models.DirectionsRoute;
 import com.mapbox.api.directions.v5.models.LegStep;
@@ -425,26 +427,6 @@ public class NavMap {
         }
         LineString lineString = LineString.fromPolyline(route.geometry(), Constants.PRECISION_6);
         return lineString.coordinates();
-    }
-
-    public static Point[] getRoutePoints(DirectionsRoute route) {
-        ArrayList<Point> routePoints = new ArrayList<>();
-        List<RouteLeg> legs = route.legs();
-        if (legs != null) {
-            for (RouteLeg leg : legs) {
-                List<LegStep> steps = leg.steps();
-                if (steps != null) {
-                    for (LegStep step : steps) {
-                        if (step.geometry() != null) {
-                            List<Point> geometryPoints = PolylineUtils.decode(step.geometry(), Constants.PRECISION_6);
-                            routePoints.addAll(geometryPoints);
-                        }
-                    }
-                }
-            }
-        }
-
-        return routePoints.toArray(new Point[0]);
     }
 
     public void shutdown() {

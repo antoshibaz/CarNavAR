@@ -10,16 +10,19 @@ import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.util.Log;
 
+import com.google.ar.sceneform.Node;
 import com.google.ar.sceneform.math.Vector3;
+import com.google.ar.sceneform.rendering.Renderable;
+import com.google.ar.sceneform.rendering.ViewRenderable;
 
 public class ArDrawer {
 
     public static void drawOverlayNavigationBeacon(Vector3 poiScreenPoint,
                                                    Canvas canvasFromOverlaySurface,
                                                    double distanceMeters,
-                                                   boolean hideIfInPOV) {
+                                                   boolean hideIfInFOV) {
         // hide nav beacon if it's marker in view of field
-        if (hideIfInPOV && poiScreenPoint.z > 0 && (poiScreenPoint.x > 0 && poiScreenPoint.x < canvasFromOverlaySurface.getWidth())
+        if (hideIfInFOV && poiScreenPoint.z > 0 && (poiScreenPoint.x > 0 && poiScreenPoint.x < canvasFromOverlaySurface.getWidth())
                 && (poiScreenPoint.y > 0 && poiScreenPoint.y < canvasFromOverlaySurface.getHeight())) {
             return;
         }
@@ -183,5 +186,17 @@ public class ArDrawer {
             trY = beacon.y - bounds.height() / 2;
         }
         canvasFromOverlaySurface.drawText(text, trX, trY, paint);
+    }
+
+    public static Node getBaseModelRenderableNode(Renderable renderable) {
+        Node base = new Node();
+        base.setRenderable(renderable);
+        return base;
+    }
+
+    public static Node getBaseViewRenderableNode(ViewRenderable renderable) {
+        Node base = new Node();
+        base.setRenderable(renderable);
+        return base;
     }
 }

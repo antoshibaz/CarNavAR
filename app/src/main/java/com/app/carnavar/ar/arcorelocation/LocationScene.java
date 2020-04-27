@@ -3,6 +3,8 @@ package com.app.carnavar.ar.arcorelocation;
 import android.app.Activity;
 import android.location.Location;
 import android.os.Handler;
+import android.os.HandlerThread;
+import android.os.Process;
 import android.util.Log;
 
 import com.app.carnavar.ar.arcorelocation.rendering.LocationNode;
@@ -11,14 +13,22 @@ import com.google.ar.core.Anchor;
 import com.google.ar.core.Frame;
 import com.google.ar.core.Pose;
 import com.google.ar.core.Session;
+import com.google.ar.sceneform.AnchorNode;
 import com.google.ar.sceneform.ArSceneView;
+import com.google.ar.sceneform.Node;
+import com.google.ar.sceneform.math.Quaternion;
 import com.google.ar.sceneform.math.Vector3;
+import com.google.ar.sceneform.rendering.Color;
+import com.google.ar.sceneform.rendering.Light;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class LocationScene {
 
     public static final String TAG = LocationScene.class.getSimpleName();
+
+    private HandlerThread updateCoroutineThread;
 
     private float RENDER_DISTANCE = 25f;
     public ArSceneView mArSceneView;
@@ -53,17 +63,26 @@ public class LocationScene {
     // Bearing adjustment. Can be set to calibrate with true north
     private int bearingAdjustment = 0;
 
+    private RefreshListener refreshListener = null;
+
+    public interface RefreshListener {
+        void onRefreshed();
+    }
+
+    public void setRefreshListener(RefreshListener refreshListener) {
+        this.refreshListener = refreshListener;
+    }
+
+    public RefreshListener getRefreshListener() {
+        return refreshListener;
+    }
+
     public LocationScene(Activity context, ArSceneView mArSceneView) {
         this.context = context;
         this.mSession = mArSceneView.getSession();
         this.mArSceneView = mArSceneView;
 
         startCalculationTask();
-
-//        deviceLocation = new DeviceLocation(context, this);
-//        deviceOrientation = new DeviceOrientation(context);
-//        deviceOrientation.resume();
-        //test();
     }
 
     public Location getCurrentLocation() {
@@ -117,18 +136,6 @@ public class LocationScene {
         this.anchorRefreshInterval = anchorRefreshInterval;
         stopCalculationTask();
         startCalculationTask();
-    }
-
-    public void clearMarkers() {
-        for (LocationMarker lm : mLocationMarkers) {
-            if (lm.anchorNode != null) {
-                lm.anchorNode.getAnchor().detach();
-                lm.anchorNode.setEnabled(false);
-                lm.anchorNode = null;
-            }
-
-        }
-        mLocationMarkers = new ArrayList<>();
     }
 
     /**
@@ -267,9 +274,9 @@ public class LocationScene {
 
                 // Raise distant markers for better illusion of distance
                 // Hacky - but it works as a temporary measure
-                int cappedRealDistance = markerDistance > 500 ? 500 : markerDistance;
-                if (renderDistance != markerDistance)
-                    heightAdjustment += 0.005F * (cappedRealDistance - renderDistance);
+//                int cappedRealDistance = markerDistance > 500 ? 500 : markerDistance;
+//                if (renderDistance != markerDistance)
+//                    heightAdjustment += 0.005F * (cappedRealDistance - renderDistance);
 
                 float z = -Math.min(renderDistance, RENDER_DISTANCE);
 
@@ -278,7 +285,8 @@ public class LocationScene {
                 float zRotated = (float) (z * Math.cos(rotationRadian));
                 float xRotated = (float) -(z * Math.sin(rotationRadian));
 
-                float y = frame.getCamera().getDisplayOrientedPose().ty() + (float) heightAdjustment;
+//                float y = frame.getCamera().getDisplayOrientedPose().ty() + (float) heightAdjustment;
+                float y = mArSceneView.getScene().getCamera().getWorldPosition().y;
 
                 if (marker.anchorNode != null && marker.anchorNode.getAnchor() != null) {
                     marker.anchorNode.getAnchor().detach();
@@ -288,13 +296,17 @@ public class LocationScene {
                 }
 
                 // Don't immediately assign newly created anchor in-case of exceptions
-                Pose translation = Pose.makeTranslation(xRotated, y, zRotated);
-                Anchor newAnchor = mSession.createAnchor(
-                        frame.getCamera()
-                                .getDisplayOrientedPose()
-                                .compose(translation)
-                                .extractTranslation()
-                );
+                Pose translation = Pose.makeTranslation(xRotated, 0, zRotated);
+                Pose trPose = frame.getCamera()
+                        .getDisplayOrientedPose()
+                        .compose(translation)
+                        .extractTranslation();
+                Quaternion identityQ = Quaternion.identity();
+                Pose anchorPose = new Pose(new float[]{trPose.tx(), y, trPose.tz()},
+                        new float[]{identityQ.x, identityQ.y, identityQ.z, identityQ.w});
+
+                Anchor newAnchor = mSession.createAnchor(anchorPose);
+                Log.d(TAG, " anchor height=" + y + " anchor tr height=" + trPose.ty());
 
                 marker.anchorNode = new LocationNode(newAnchor, marker, this);
                 marker.anchorNode.setScalingMode(LocationMarker.ScalingMode.NO_SCALING);
@@ -314,21 +326,126 @@ public class LocationScene {
 
                 // Locations further than RENDER_DISTANCE are remapped to be rendered closer.
                 // => height differential also has to ensure the remap is correct
-                if (markerDistance > RENDER_DISTANCE) {
-                    float renderHeight = RENDER_DISTANCE * marker.getHeight() / markerDistance;
-                    marker.anchorNode.setHeight(renderHeight);
-                } else {
-                    marker.anchorNode.setHeight(marker.getHeight());
+//                if (markerDistance > RENDER_DISTANCE) {
+//                    float renderHeight = RENDER_DISTANCE * marker.getHeight() / markerDistance;
+//                    marker.anchorNode.setHeight(renderHeight);
+//                } else {
+//                    marker.anchorNode.setHeight(marker.getHeight());
+//                }
+                float h = mArSceneView.getScene().getCamera().getWorldPosition().y;
+                marker.anchorNode.setHeight(h);
+                marker.anchorNode.setSmoothed(true);
+                Log.d(TAG, " node height=" + h);
+
+                if (minimalRefreshing) {
+                    marker.anchorNode.scaleAndRotate();
                 }
 
-                if (minimalRefreshing)
-                    marker.anchorNode.scaleAndRotate();
+                if (refreshListener != null) {
+                    refreshListener.onRefreshed();
+                }
+
             } catch (Exception e) {
                 e.printStackTrace();
             }
         }
         //this is bad, you should feel bad
         System.gc();
+    }
+
+    private List<Vector3> drawingRoutePointsList;
+    private List<Integer> distances;
+    private AnchorNode routeAnchor;
+
+//    private void calcRouteWorldPoints(Frame frame, NavMapRoute route) {
+//        if (currentLocation == null) return;
+//
+//        int i = 0;
+//        drawingRoutePointsList = new LinkedList<>();
+//        distances = new LinkedList<>();
+//
+//        if (routeAnchor != null && routeAnchor.getAnchor() != null) {
+//            routeAnchor.getAnchor().detach();
+//            routeAnchor.setEnabled(false);
+//            routeAnchor.setAnchor(null);
+//            routeAnchor = null;
+//        }
+//
+//        Anchor newRouteAnchor = mSession.createAnchor(
+//                frame.getCamera().getDisplayOrientedPose().extractTranslation());
+//
+//        for (Point p : route.getRoutePoints()) {
+//            i++;
+//            int routePointDistance = (int) Math.round(
+//                    MapsUtils.euclideanPythagoreanDistance(p.latitude(),
+//                            p.longitude(),
+//                            lastLocation.getLatitude(),
+//                            lastLocation.getLongitude())
+//            );
+//
+//            if (routePointDistance > 100) {
+//                continue;
+//            }
+//
+//            float routePointBearing = (float) MapsUtils.calcBearing(
+//                    lastLocation.getLatitude(),
+//                    lastLocation.getLongitude(),
+//                    p.latitude(),
+//                    p.longitude());
+//
+//            float bearing = ((routePointBearing - (float) calibratedBearing) + 360f) % 360;
+//            double rotation = Math.floor(bearing);
+//            float z = -routePointDistance;
+//            double rotationRadian = Math.toRadians(rotation);
+//            float zRotated = (float) (z * Math.cos(rotationRadian));
+//            float xRotated = (float) -(z * Math.sin(rotationRadian));
+//            float y = lastPose.ty() - 1f;
+//            Pose translation = Pose.makeTranslation(xRotated, y, zRotated);
+//            Pose routePointPose = lastPose
+//                    .compose(translation)
+//                    .extractTranslation();
+//
+//            Vector3 routePointWorld = new Vector3();
+//            routePointWorld.x = routePointPose.tx();
+//            routePointWorld.y = routePointPose.ty();
+//            routePointWorld.z = routePointPose.tz();
+//            drawingRoutePointsList.add(routePointWorld);
+//            distances.add(routePointDistance);
+//        }
+//    }
+
+    public static LocationMarker getBaseLocationMarker(double lat, double lng, Node renderableNode) {
+        return new LocationMarker(lng, lat, renderableNode);
+    }
+
+    public void attachLocationMarker(LocationMarker locationMarker) {
+        // Adding the marker to list
+        this.mLocationMarkers.add(locationMarker);
+        this.refreshAnchors();
+    }
+
+    public void detachLocationMarker(LocationMarker locationMarker) {
+        if (this.mLocationMarkers.contains(locationMarker)) {
+            this.mLocationMarkers.remove(locationMarker);
+            utilizeLocationMarker(locationMarker);
+        }
+    }
+
+    public void detachAllLocationMarkers() {
+        for (LocationMarker locationMarker : mLocationMarkers) {
+            utilizeLocationMarker(locationMarker);
+        }
+        mLocationMarkers = new ArrayList<>();
+    }
+
+    private void utilizeLocationMarker(LocationMarker locationMarker) {
+        if (locationMarker.anchorNode != null && locationMarker.anchorNode.getAnchor() != null) {
+            locationMarker.anchorNode.getAnchor().detach();
+            locationMarker.anchorNode.setEnabled(false);
+            locationMarker.anchorNode.setAnchor(null);
+            locationMarker.anchorNode = null;
+            this.refreshAnchors();
+        }
     }
 
     public void updateGpsLocation(Location location) {
@@ -366,16 +483,14 @@ public class LocationScene {
      * Resume sensor services. Important!
      */
     public void onPause() {
-//        deviceOrientation.resume();
-//        deviceLocation.resume();
+
     }
 
     /**
      * Pause sensor services. Important!
      */
     public void onResume() {
-//        deviceOrientation.pause();
-//        deviceLocation.pause();
+        updateCoroutineThread = new HandlerThread("ArLocationSceneUpdateThread", Process.THREAD_PRIORITY_DEFAULT);
     }
 
     void startCalculationTask() {
@@ -384,5 +499,9 @@ public class LocationScene {
 
     void stopCalculationTask() {
         mHandler.removeCallbacks(anchorRefreshTask);
+    }
+
+    public static void transformGeoToWorld() {
+
     }
 }

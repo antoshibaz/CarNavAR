@@ -133,6 +133,7 @@ public class GpsImuService extends Service {
         gpsProviderThread.setGpsLocationListener(location -> {
             // base location
             Log.d(TAG, "Android location -> " + MapsUtils.toString(location));
+            //publishToClients(() -> notifyAllGpsLocationListeners(location));
             if (gpsImuFusionLocationThread != null) {
                 if (!gpsImuFusionLocationThread.isInitialized()) {
                     gpsImuFusionLocationThread.postInitTask(location);

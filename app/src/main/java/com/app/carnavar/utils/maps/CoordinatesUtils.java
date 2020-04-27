@@ -173,11 +173,34 @@ public class CoordinatesUtils {
         ndcCoords[0] = ndcCoords[0] / ndcCoords[3];
         ndcCoords[1] = ndcCoords[1] / ndcCoords[3];
 
-        float[] screenCoords = new float[]{0f, 0f};
+        float[] screenCoords = new float[3];
         screenCoords[0] = (float) (screenWidth * ((ndcCoords[0] + 1.0) / 2.0));
         screenCoords[1] = (float) (screenHeight * ((1.0 - ndcCoords[1]) / 2.0));
+        screenCoords[2] = ndcCoords[2];
 
         return screenCoords;
+    }
+
+    public static Vector3 convertWorld2Screen(Vector3 worldPoint, float[] projMat, float[] rotMat, Size screenSize) {
+        float[] origin = {worldPoint.x, worldPoint.y, worldPoint.z, 1f};
+        float[] ndcCoords = new float[4];
+        float[] rotProjMat = new float[16];
+        Matrix.multiplyMV(rotProjMat, 0, projMat, 0, rotMat, 0);
+        Matrix.multiplyMV(ndcCoords, 0, rotProjMat, 0, origin, 0);
+
+        ndcCoords[0] = ndcCoords[0] / ndcCoords[3];
+        ndcCoords[1] = ndcCoords[1] / ndcCoords[3];
+
+        float[] screenCoords = new float[3];
+        screenCoords[0] = (float) (screenSize.getWidth() * ((ndcCoords[0] + 1.0) / 2.0));
+        screenCoords[1] = (float) (screenSize.getHeight() * ((1.0 - ndcCoords[1]) / 2.0));
+        screenCoords[2] = ndcCoords[2];
+        Vector3 ret = new Vector3();
+        ret.x = screenCoords[0];
+        ret.y = screenCoords[1];
+        ret.z = screenCoords[2];
+
+        return ret;
     }
 
     public static Vector3 worldToScreenPoint(Vector3 point,

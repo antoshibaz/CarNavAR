@@ -3,6 +3,13 @@ package com.app.carnavar;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Typeface;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.location.Location;
 import android.media.Image;
 import android.net.Uri;
@@ -10,7 +17,9 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.util.Log;
 import android.util.Size;
+import android.view.Surface;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.TextView;
 
 import com.app.carnavar.ar.ArDrawer;
@@ -19,6 +28,7 @@ import com.app.carnavar.ar.arcorelocation.LocationScene;
 import com.app.carnavar.cv.CvInferenceThread;
 import com.app.carnavar.hal.sensors.SensorTypes;
 import com.app.carnavar.maps.NavMap;
+import com.app.carnavar.maps.NavMapRoute;
 import com.app.carnavar.services.ServicesRepository;
 import com.app.carnavar.services.gpsimu.GpsImuService;
 import com.app.carnavar.services.gpsimu.GpsImuServiceInterfaces;
@@ -30,6 +40,7 @@ import com.app.carnavar.utils.filters.LocationFilters;
 import com.app.carnavar.utils.maps.CoordinatesUtils;
 import com.app.carnavar.utils.maps.MapsUtils;
 import com.google.ar.core.Frame;
+import com.google.ar.core.Pose;
 import com.google.ar.core.Session;
 import com.google.ar.core.SharedCamera;
 import com.google.ar.core.TrackingState;
@@ -40,12 +51,17 @@ import com.google.ar.sceneform.ArSceneView;
 import com.google.ar.sceneform.Node;
 import com.google.ar.sceneform.math.Quaternion;
 import com.google.ar.sceneform.math.Vector3;
+import com.google.ar.sceneform.rendering.Light;
+import com.google.ar.sceneform.rendering.MaterialFactory;
 import com.google.ar.sceneform.rendering.ModelRenderable;
 import com.google.ar.sceneform.rendering.Renderable;
 import com.google.ar.sceneform.rendering.ViewRenderable;
+import com.mapbox.api.directions.v5.models.LegStep;
 import com.mapbox.geojson.Point;
 import com.mapbox.mapboxsdk.maps.MapView;
 
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -78,6 +94,8 @@ public class ArActivity extends AppCompatActivity {
     private Location lastLocation;
     private float[] currentOrientationAngles = new float[3];
 
+    private NavMapRoute currentNavRoute;
+
     private LocationFilters.GeoLocationHeuristicFilter geoLocationHeuristicFilter = new LocationFilters.GeoLocationHeuristicFilter();
 
     private CvInferenceThread cvInferenceThread;
@@ -94,9 +112,13 @@ public class ArActivity extends AppCompatActivity {
 
     private GpsImuServiceInterfaces.GpsLocationListener gpsLocationListener = this::updateForLocation;
 
+    private OverlayView.DrawCallback drawCallback;
+
     private float deltaBearing = 0;
     private int gpsBearingEstablishmentFactor = 0;
     private float calibratedBearing = 0;
+
+    private Pose lastPose;
 
     private void updateForOrientation(float[] orientationAngles) {
         float prevOrientationBearing = currentOrientationAngles[0];
@@ -155,10 +177,10 @@ public class ArActivity extends AppCompatActivity {
         }
 
         if (navMap != null && navMapInitSuccess) {
-            if (filteredLocation != lastLocation || filteredLocation != navMap.getLastLocation()) {
+            if (filteredLocation != lastLocation) {
                 Location updLocation = new Location(filteredLocation);
-                updLocation.setBearing(calibratedBearing == 0 ? 360f : calibratedBearing);
-                navMap.updateLocation(filteredLocation);
+                updLocation.setBearing(((int) calibratedBearing == 0) ? 360f : calibratedBearing);
+                navMap.updateLocation(updLocation);
             }
 
             if (navMap.getCurrentDestinationPoint() == null) {
@@ -232,6 +254,11 @@ public class ArActivity extends AppCompatActivity {
                             try {
                                 poiViewRenderable = poiLayout.get();
                                 arrowRenderable = arrowModel.get();
+                                MaterialFactory.makeOpaqueWithColor(getApplicationContext(),
+                                        new com.google.ar.sceneform.rendering.Color(android.graphics.Color.parseColor("#FF00FFE5")))
+                                        .thenAccept(material -> {
+                                            arrowRenderable.setMaterial(material);
+                                        });
                                 hasRenderersFinishedLoading = true;
                             } catch (InterruptedException | ExecutionException ex) {
                                 displayError(this, "Unable to load renderables", ex);
@@ -242,6 +269,7 @@ public class ArActivity extends AppCompatActivity {
 
         // disable plane renderer as it not use in this scenario
         arSceneView.getPlaneRenderer().setEnabled(false);
+        arSceneView.getScene().getSunlight().setEnabled(true);
         // Set an update listener looper on the Scene
         arSceneView.getScene().addOnUpdateListener(frameTime -> arUpdateLooper());
 
@@ -264,17 +292,27 @@ public class ArActivity extends AppCompatActivity {
                         newDstPoint.longitude());
                 if (locationScene != null) {
                     // call to render ar now
-                    detachLocationMarkerFromScene(targetDestinationMarker);
+                    locationScene.detachAllLocationMarkers();
                     targetDestinationMarker = newDestinationMarker;
-                    attachLocationMarkerToScene(targetDestinationMarker);
-                    Log.d(TAG, "attaching");
+                    locationScene.attachLocationMarker(targetDestinationMarker);
                 } else {
                     // put to queue for rendering
                     targetDestinationMarker = newDestinationMarker;
                 }
             }
         });
-        navMap.setUpdateRoutesListener((currentTargetRoute, currentAvailableRoutes) -> navMap.trackingMyLocation(150));
+        navMap.setUpdateRoutesListener((currentTargetRoute, currentAvailableRoutes) -> {
+            navMap.trackingMyLocation(150);
+            if (hasRenderersFinishedLoading && locationScene != null) {
+                currentNavRoute = new NavMapRoute(currentTargetRoute);
+                StringBuilder sb = new StringBuilder();
+                for (LegStep step : currentNavRoute.getManeuverPoints()) {
+                    sb.append(step.maneuver().type()).append(" ");
+                }
+                Log.d(TAG, "maneuvers -> " + sb.toString());
+                addManeuverMarkersToArScene(currentNavRoute.getManeuverPoints());
+            }
+        });
 
         overlayView = findViewById(R.id.overlay);
         overlayView.addDrawCallback(this::overlayUpdateLooper);
@@ -282,7 +320,8 @@ public class ArActivity extends AppCompatActivity {
 
     private void updateOverlay(long updateTimeInterval) {
         new Handler().postDelayed(() -> {
-            if (overlayView != null && hasRenderersFinishedLoading && navMapInitSuccess) {
+            if (overlayView != null && locationScene != null
+                    && hasRenderersFinishedLoading && navMapInitSuccess) {
                 overlayView.postInvalidate();
             }
             updateOverlay(updateTimeInterval);
@@ -309,12 +348,13 @@ public class ArActivity extends AppCompatActivity {
             locationScene.refreshAnchors();
             //locationScene.setAnchorRefreshInterval(30);
             locationScene.setRefreshAnchorsAsLocationChanges(true);
+            locationScene.setOffsetOverlapping(false);
+            locationScene.setRemoveOverlapping(false);
 
             // Now lets create our location markers
             if (targetDestinationMarker != null
                     && !locationScene.mLocationMarkers.contains(targetDestinationMarker)) {
-                attachLocationMarkerToScene(targetDestinationMarker);
-                Log.d(TAG, "attaching");
+                locationScene.attachLocationMarker(targetDestinationMarker);
             }
 
 //            double[] latLng = MapsUtils.getDstLocationByBearingAndDistance(dstPoiMarker[1], dstPoiMarker[0], 180, 100);
@@ -360,6 +400,18 @@ public class ArActivity extends AppCompatActivity {
 //        }
 //        arSceneView.getScene().getCamera().getWorldPosition();
 
+        if (locationScene != null && locationScene.getRefreshListener() == null) {
+            locationScene.setRefreshListener(() -> {
+                lastPose = frame.getCamera().getDisplayOrientedPose();
+                if (currentNavRoute != null) {
+                    calcRouteWorldPoints(currentNavRoute);
+                    if (drawCallback == null) {
+                        drawCallback = this::drawRoutePoints;
+                        overlayView.addDrawCallback(drawCallback);
+                    }
+                }
+            });
+        }
 
         if (frame.getCamera().getTrackingState() != TrackingState.TRACKING) {
             return;
@@ -390,53 +442,139 @@ public class ArActivity extends AppCompatActivity {
             dstLoc.setLongitude(targetDestinationMarker.longitude);
             dstLoc.setLatitude(targetDestinationMarker.latitude);
             //dstLoc.setAltitude(0);
+            //float[] p = new float[]{0, -1, -5, 1};
 
-            Size imageSize = new Size(arCoreSession.getCameraConfig().getImageSize().getWidth(),
-                    arCoreSession.getCameraConfig().getImageSize().getWidth());
             Size screenSize = new Size(canvas.getWidth(), canvas.getHeight());
-            float[] worldCoordsOfPoi = CoordinatesUtils.convertGpsToWorld(lastLocation, dstLoc);
-            Log.d(TAG, " east=" + worldCoordsOfPoi[0] + " north=" + worldCoordsOfPoi[1] + " up" + worldCoordsOfPoi[2]);
-
             // Approach 1
-            Vector3 dstVec = targetDestinationMarker.anchorNode.getWorldPosition();
-            dstVec.y = -3f;
+            float[] pose = targetDestinationMarker.anchorNode.getAnchor().getPose().getTranslation();
+//            Vector3 dstVec = targetDestinationMarker.node.getWorldPosition();
+            Vector3 dstVec = new Vector3();
+            dstVec.x = pose[0];
+            dstVec.y = pose[1];
+            dstVec.z = pose[2];
+            //dstVec.y = -3f;
             Vector3 screenPoiVec = CoordinatesUtils.worldToScreenPoint(dstVec,
                     arSceneView.getScene().getCamera().getProjectionMatrix(),
                     arSceneView.getScene().getCamera().getViewMatrix(), screenSize);
-//            Vector3 screenPoiVec = arSceneView.getScene().getCamera().worldToScreenPoint(dstVec);
             ArDrawer.drawOverlayNavigationBeacon(screenPoiVec, canvas,
                     targetDestinationMarker.anchorNode.getDistance(), true);
         }
     }
 
-    private void calcAndDrawPathPoints() {
+    private List<Vector3> drawingRoutePointsList;
+    private List<Integer> distances;
 
+    private void calcRouteWorldPoints(NavMapRoute route) {
+        if (lastLocation == null || locationScene == null
+                || !hasRenderersFinishedLoading || !navMapInitSuccess) return;
+
+        int i = 0;
+        drawingRoutePointsList = new LinkedList<>();
+        distances = new LinkedList<>();
+        for (Point p : route.getRoutePoints()) {
+            i++;
+            int routePointDistance = (int) Math.round(
+                    MapsUtils.euclideanPythagoreanDistance(p.latitude(),
+                            p.longitude(),
+                            lastLocation.getLatitude(),
+                            lastLocation.getLongitude())
+            );
+
+            if (routePointDistance > 100) {
+                continue;
+            }
+
+            float routePointBearing = (float) MapsUtils.calcBearing(
+                    lastLocation.getLatitude(),
+                    lastLocation.getLongitude(),
+                    p.latitude(),
+                    p.longitude());
+
+            float bearing = ((routePointBearing - (float) calibratedBearing) + 360f) % 360;
+            double rotation = Math.floor(bearing);
+            float z = -routePointDistance;
+            double rotationRadian = Math.toRadians(rotation);
+            float zRotated = (float) (z * Math.cos(rotationRadian));
+            float xRotated = (float) -(z * Math.sin(rotationRadian));
+            float y = arSceneView.getScene().getCamera().getWorldPosition().y - 5f;
+            Log.d("1y=", "" + y);
+            Pose translation = Pose.makeTranslation(xRotated, 0, zRotated);
+            Pose routePointPose = lastPose
+                    .compose(translation)
+                    .extractTranslation();
+            Log.d("2y=", "" + lastPose.ty());
+            Log.d("3y=", "" + routePointPose.ty());
+            Vector3 routePointWorld = new Vector3();
+            routePointWorld.x = routePointPose.tx();
+            routePointWorld.y = y;
+            routePointWorld.z = routePointPose.tz();
+            drawingRoutePointsList.add(routePointWorld);
+            distances.add(routePointDistance);
+            Log.d(TAG, " world" + routePointWorld.toString());
+        }
     }
 
-    private static LocationMarker getBaseLocationMarker(double lat, double lng, Node renderableNode) {
-        return new LocationMarker(lng, lat, renderableNode);
+    private void drawRoutePoints(Canvas canvas) {
+        Paint paint = new Paint();
+        paint.setAntiAlias(true);
+        paint.setColor(Color.WHITE);
+        paint.setStrokeWidth(5);
+        paint.setStyle(Paint.Style.FILL);
+        paint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.NORMAL));
+        paint.setTextSize(24);
+        Size screenSize = new Size(canvas.getWidth(), canvas.getHeight());
+        int i = 0;
+        for (Vector3 routePointWorld : drawingRoutePointsList) {
+            Vector3 routePointScreen = CoordinatesUtils.worldToScreenPoint(routePointWorld,
+                    arSceneView.getScene().getCamera().getProjectionMatrix(),
+                    arSceneView.getScene().getCamera().getViewMatrix(), screenSize);
+            if (routePointScreen.z >= 0) {
+                canvas.drawCircle(routePointScreen.x, routePointScreen.y, 15, paint);
+                canvas.drawText(String.valueOf(distances.get(i)), routePointScreen.x, routePointScreen.y - 25, paint);
+                Log.d(TAG, " x=" + routePointScreen.x + " y=" + routePointScreen.y + " dist=" + distances.get(i));
+                i++;
+            }
+        }
+        Log.d(TAG, " i=" + i);
     }
 
-    private void attachLocationMarkerToScene(LocationMarker locationMarker) {
-        // Adding the marker to list
-        locationScene.mLocationMarkers.add(locationMarker);
-        locationScene.refreshAnchors();
-    }
+    private void addManeuverMarkersToArScene(List<LegStep> routeManeuverPoints) {
+        for (LegStep step : routeManeuverPoints) {
+            // filtering required maneuver types
+            if (NavMapRoute.mapToManeuverType(step.maneuver().type()) != NavMapRoute.ManeuverType.TURN
+                    && NavMapRoute.mapToManeuverType(step.maneuver().type()) != NavMapRoute.ManeuverType.MERGE) {
+                continue;
+            }
 
-    private void detachLocationMarkerFromScene(LocationMarker locationMarker) {
-        if (locationScene.mLocationMarkers.contains(locationMarker)) {
-            locationScene.mLocationMarkers.remove(locationMarker);
-            locationMarker.anchorNode.getAnchor();
-            locationMarker.anchorNode.getAnchor().detach();
-            locationMarker.anchorNode.setEnabled(false);
-            locationMarker.anchorNode.setAnchor(null);
-            locationMarker.anchorNode = null;
-            locationScene.refreshAnchors();
+            LocationMarker maneuverMarker = new LocationMarker(step.maneuver().location().longitude(),
+                    step.maneuver().location().latitude(), getArrowModelNode());
+            maneuverMarker.setHeight(0f);
+            //maneuverMarker.setScalingMode(LocationMarker.ScalingMode.NO_SCALING);
+            maneuverMarker.setScaleModifier(0.7f);
+            maneuverMarker.setScalingMode(LocationMarker.ScalingMode.GRADUAL_FIXED_SIZE);
+            maneuverMarker.setOnlyRenderWhenWithin(150);
+            double bearFrom = step.maneuver().bearingBefore();
+            double bearTo = step.maneuver().bearingAfter();
+            float bearing = (float) (((bearTo - calibratedBearing) + 360f) % 360); //calibBear==bearFrom
+            float rotation = (float) Math.floor(360 - bearing);
+            maneuverMarker.setRenderEvent(node -> {
+                for (Node n : node.getChildren()) {
+                    maneuverMarker.anchorNode.setLight(
+                            Light.builder(Light.Type.SPOTLIGHT).setColor(
+                                    new com.google.ar.sceneform.rendering.Color(255, 255, 255)).build());
+                    n.setLight(
+                            Light.builder(Light.Type.SPOTLIGHT).setColor(
+                                    new com.google.ar.sceneform.rendering.Color(255, 255, 255)).build());
+                    n.setWorldRotation(Quaternion.axisAngle(new Vector3(0f, 1f, 0f), rotation));
+                }
+            });
+            locationScene.attachLocationMarker(maneuverMarker);
+            Log.d(TAG, "maneuver marker is added");
         }
     }
 
     private LocationMarker createDestinationPoiMarker(double lat, double lng) {
-        LocationMarker poiLocationMarker = getBaseLocationMarker(lat, lng, getDestinationPoiViewNode());
+        LocationMarker poiLocationMarker = LocationScene.getBaseLocationMarker(lat, lng, getDestinationPoiViewNode());
         poiLocationMarker.setGradualScalingMaxScale(0.8f);
         poiLocationMarker.setGradualScalingMinScale(0.2f);
         poiLocationMarker.setScalingMode(LocationMarker.ScalingMode.GRADUAL_FIXED_SIZE);
@@ -452,21 +590,9 @@ public class ArActivity extends AppCompatActivity {
         return poiLocationMarker;
     }
 
-    private static Node getBaseModelRenderableNode(Renderable renderable) {
-        Node base = new Node();
-        base.setRenderable(renderable);
-        return base;
-    }
-
-    private static Node getBaseViewRenderableNode(ViewRenderable renderable) {
-        Node base = new Node();
-        base.setRenderable(renderable);
-        return base;
-    }
-
     private Node getDestinationPoiViewNode() {
         // create and configure node
-        Node dstPoiNode = getBaseViewRenderableNode(poiViewRenderable);
+        Node dstPoiNode = ArDrawer.getBaseViewRenderableNode(poiViewRenderable);
         dstPoiNode.setName("dst_poi");
         // configure node view
         View eView = poiViewRenderable.getView();
@@ -479,10 +605,8 @@ public class ArActivity extends AppCompatActivity {
 
     private Node getArrowModelNode() {
         // create and configure node
-        Node arrowNode = getBaseModelRenderableNode(arrowRenderable);
+        Node arrowNode = ArDrawer.getBaseModelRenderableNode(arrowRenderable);
         arrowNode.setName("arrow");
-        arrowNode.setLocalPosition(Vector3.zero());
-        arrowNode.setLocalRotation(Quaternion.axisAngle(new Vector3(1f, 0f, 0f), 30f));
         arrowNode.setOnTapListener((v, event) -> {
             DisplayMessagesUtils.showToastMsg(getApplicationContext(), "Arrow touched");
         });
@@ -495,12 +619,66 @@ public class ArActivity extends AppCompatActivity {
         navMapView.onStart();
     }
 
+    SensorManager sensorManager;
+    float[] rawValues = new float[4];
+    float[] rot = new float[16];
+    SensorEventListener sensorEventListener = new SensorEventListener() {
+        @Override
+        public void onSensorChanged(SensorEvent event) {
+            if (event.sensor.getType() == Sensor.TYPE_ROTATION_VECTOR) {
+                System.arraycopy(event.values, 0, rawValues, 0, rawValues.length);
+                SensorManager.getRotationMatrixFromVector(rot, rawValues);
+
+                int worldAxisForDeviceAxisX;
+                int worldAxisForDeviceAxisY;
+                // Remap the matrix based on current device/activity rotation
+                // for vertical portrait device (device ax Y = Earth ax Z) as default
+                switch (((WindowManager) getSystemService(WINDOW_SERVICE)).getDefaultDisplay().getRotation()) {
+                    case Surface.ROTATION_90:
+                        worldAxisForDeviceAxisX = SensorManager.AXIS_Z;
+                        worldAxisForDeviceAxisY = SensorManager.AXIS_MINUS_X;
+                        break;
+                    case Surface.ROTATION_180:
+                        worldAxisForDeviceAxisX = SensorManager.AXIS_MINUS_X;
+                        worldAxisForDeviceAxisY = SensorManager.AXIS_MINUS_Z;
+                        break;
+                    case Surface.ROTATION_270:
+                        worldAxisForDeviceAxisX = SensorManager.AXIS_MINUS_Z;
+                        worldAxisForDeviceAxisY = SensorManager.AXIS_X;
+                        break;
+                    case Surface.ROTATION_0:
+                    default:
+                        worldAxisForDeviceAxisX = SensorManager.AXIS_X;
+                        worldAxisForDeviceAxisY = SensorManager.AXIS_Z;
+                        break;
+                }
+
+                float[] angles2 = new float[3];
+                float[] adjR = new float[16];
+                SensorManager.remapCoordinateSystem(rot, worldAxisForDeviceAxisX,
+                        worldAxisForDeviceAxisY, adjR);
+                SensorManager.getOrientation(adjR, angles2);
+                angles2[0] = (float) ((Math.toDegrees(angles2[0]) + 360f) % 360f);
+                Log.d("orient", "heading=" + angles2[0]);
+                imuListener.onImuReturned(angles2, SensorTypes.ORIENTATION_ROTATION_ANGLES, event.timestamp);
+            }
+        }
+
+        @Override
+        public void onAccuracyChanged(Sensor sensor, int accuracy) {
+
+        }
+    };
+
     /**
      * Make sure we call locationScene.resume();
      */
     @Override
     protected void onResume() {
         super.onResume();
+//        sensorManager = (SensorManager) this.getSystemService(Context.SENSOR_SERVICE);
+//        sensorManager.registerListener(sensorEventListener, sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR),
+//                50000);
 
         ServicesRepository.getInstance().startService(getApplicationContext(), GpsImuService.class, () -> {
             ServicesRepository.getInstance().getService(GpsImuService.class, serviceInstance -> {
@@ -556,6 +734,7 @@ public class ArActivity extends AppCompatActivity {
     @Override
     public void onPause() {
         super.onPause();
+        //sensorManager.unregisterListener(sensorEventListener);
 
         ServicesRepository.getInstance().getService(GpsImuService.class, serviceInstance -> {
             serviceInstance.unregisterImuListener(imuListener);

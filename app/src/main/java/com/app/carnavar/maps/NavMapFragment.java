@@ -104,7 +104,6 @@ public class NavMapFragment extends Fragment {
         });
         navMap.setUpdateRoutesListener((currentTargetRoute, currentAvailableRoutes) -> {
             navMap.showRouteOverview(currentTargetRoute);
-            Log.d(TAG, Arrays.toString(NavMap.getRoutePoints(currentTargetRoute)));
         });
 
         bottomSheet = view.findViewById(R.id.mapbox_plugins_picker_bottom_sheet);

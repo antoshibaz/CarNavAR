@@ -147,7 +147,7 @@ public class GpsImuFusionLocationThread extends HandlerThread {
     }
 
     public static GpsImuFusionLocationThread createAndStart(Context context) {
-        GpsImuFusionLocationThread gpsImuFusionLocationThread = new GpsImuFusionLocationThread(context, TAG, Process.THREAD_PRIORITY_DEFAULT);
+        GpsImuFusionLocationThread gpsImuFusionLocationThread = new GpsImuFusionLocationThread(context, TAG, Process.THREAD_PRIORITY_BACKGROUND);
         initAndStart(gpsImuFusionLocationThread);
         return gpsImuFusionLocationThread;
     }

@@ -146,7 +146,6 @@ public class LocationNode extends AnchorNode {
         if (!locationScene.minimalRefreshing())
             scaleAndRotate();
 
-
         if (renderEvent != null) {
             if (this.isTracking() && this.isActive() && this.isEnabled())
                 renderEvent.render(this);

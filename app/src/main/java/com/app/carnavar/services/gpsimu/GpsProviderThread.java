@@ -62,7 +62,7 @@ public class GpsProviderThread extends HandlerThread {
     }
 
     public static GpsProviderThread createAndStart(Context context) {
-        GpsProviderThread gpsProviderThread = new GpsProviderThread(context, TAG, Process.THREAD_PRIORITY_DEFAULT);
+        GpsProviderThread gpsProviderThread = new GpsProviderThread(context, TAG, Process.THREAD_PRIORITY_BACKGROUND);
         initAndStart(gpsProviderThread);
         return gpsProviderThread;
     }

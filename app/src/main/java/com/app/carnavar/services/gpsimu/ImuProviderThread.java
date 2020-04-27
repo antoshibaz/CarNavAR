@@ -63,7 +63,7 @@ public class ImuProviderThread extends HandlerThread {
     }
 
     public static ImuProviderThread createAndStart(Context context) {
-        ImuProviderThread imuProviderThread = new ImuProviderThread(context, TAG, Process.THREAD_PRIORITY_DEFAULT);
+        ImuProviderThread imuProviderThread = new ImuProviderThread(context, TAG, Process.THREAD_PRIORITY_BACKGROUND);
         initAndStart(imuProviderThread);
         return imuProviderThread;
     }
