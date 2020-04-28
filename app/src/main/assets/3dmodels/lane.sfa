@@ -1,7 +1,7 @@
 {
   materials: [
     {
-      name: 'SVGMat.003',
+      name: 'material_1',
       parameters: [
         {
           baseColor: null,
@@ -15,10 +15,10 @@
           ],
         },
         {
-          metallic: 1,
+          metallic: 0,
         },
         {
-          roughness: 0.078326000000000007,
+          roughness: 1,
         },
         {
           opacity: null,
@@ -30,12 +30,12 @@
   model: {
     attributes: [
       'Position',
+      'TexCoord',
       'Orientation',
-      'Color'
     ],
     collision: {},
-    file: 'sampledata/models/RLab-arrow.obj',
-    name: 'RLab-arrow',
+    file: 'sampledata/models/lane.obj',
+    name: 'lane',
     recenter: 'root',
   },
   version: '0.54:2',

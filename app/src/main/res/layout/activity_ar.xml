@@ -13,8 +13,15 @@
         android:layout_height="match_parent"
         android:layout_gravity="top" />
 
+<!--    android:windowIsTranslucent="true"-->
+    <android.opengl.GLSurfaceView
+        android:id="@+id/ar_glsurface_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="top"/>
+
     <com.app.carnavar.ui.OverlayView
-        android:id="@+id/overlay"
+        android:id="@+id/ar_overlay_view"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 

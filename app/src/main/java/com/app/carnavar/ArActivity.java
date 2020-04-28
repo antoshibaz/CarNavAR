@@ -23,6 +23,7 @@ import android.view.WindowManager;
 import android.widget.TextView;
 
 import com.app.carnavar.ar.ArDrawer;
+import com.app.carnavar.ar.ArSurfaceView;
 import com.app.carnavar.ar.arcorelocation.LocationMarker;
 import com.app.carnavar.ar.arcorelocation.LocationScene;
 import com.app.carnavar.cv.CvInferenceThread;
@@ -57,7 +58,9 @@ import com.google.ar.sceneform.rendering.ModelRenderable;
 import com.google.ar.sceneform.rendering.Renderable;
 import com.google.ar.sceneform.rendering.ViewRenderable;
 import com.mapbox.api.directions.v5.models.LegStep;
+import com.mapbox.core.constants.Constants;
 import com.mapbox.geojson.Point;
+import com.mapbox.geojson.utils.PolylineUtils;
 import com.mapbox.mapboxsdk.maps.MapView;
 
 import java.util.LinkedList;
@@ -85,6 +88,8 @@ public class ArActivity extends AppCompatActivity {
     // Renderables objects (views, models and other)
     private ViewRenderable poiViewRenderable;
     private Renderable arrowRenderable;
+
+    private ArSurfaceView arSurfaceView;
 
     private MapView navMapView;
     private NavMap navMap;
@@ -314,7 +319,7 @@ public class ArActivity extends AppCompatActivity {
             }
         });
 
-        overlayView = findViewById(R.id.overlay);
+        overlayView = findViewById(R.id.ar_overlay_view);
         overlayView.addDrawCallback(this::overlayUpdateLooper);
     }
 
@@ -333,6 +338,8 @@ public class ArActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         init(savedInstanceState);
         updateOverlay(33L);
+        arSurfaceView = new ArSurfaceView();
+        arSurfaceView.onCreate(this);
     }
 
     private void arUpdateLooper() {
@@ -373,6 +380,10 @@ public class ArActivity extends AppCompatActivity {
         Frame frame = arSceneView.getArFrame();
         if (frame == null) {
             return;
+        }
+
+        if (arSurfaceView != null) {
+            arSurfaceView.update(frame);
         }
 
         // image analysis
@@ -480,9 +491,9 @@ public class ArActivity extends AppCompatActivity {
                             lastLocation.getLongitude())
             );
 
-            if (routePointDistance > 100) {
-                continue;
-            }
+//            if (routePointDistance > 100) {
+//                continue;
+//            }
 
             float routePointBearing = (float) MapsUtils.calcBearing(
                     lastLocation.getLatitude(),
@@ -497,13 +508,13 @@ public class ArActivity extends AppCompatActivity {
             float zRotated = (float) (z * Math.cos(rotationRadian));
             float xRotated = (float) -(z * Math.sin(rotationRadian));
             float y = arSceneView.getScene().getCamera().getWorldPosition().y - 5f;
-            Log.d("1y=", "" + y);
+            //Log.d("1y=", "" + y);
             Pose translation = Pose.makeTranslation(xRotated, 0, zRotated);
             Pose routePointPose = lastPose
                     .compose(translation)
                     .extractTranslation();
-            Log.d("2y=", "" + lastPose.ty());
-            Log.d("3y=", "" + routePointPose.ty());
+            //Log.d("2y=", "" + lastPose.ty());
+            //Log.d("3y=", "" + routePointPose.ty());
             Vector3 routePointWorld = new Vector3();
             routePointWorld.x = routePointPose.tx();
             routePointWorld.y = y;
@@ -512,6 +523,7 @@ public class ArActivity extends AppCompatActivity {
             distances.add(routePointDistance);
             Log.d(TAG, " world" + routePointWorld.toString());
         }
+        Log.d(TAG, "route points count=" + (++i));
     }
 
     private void drawRoutePoints(Canvas canvas) {
@@ -541,8 +553,9 @@ public class ArActivity extends AppCompatActivity {
     private void addManeuverMarkersToArScene(List<LegStep> routeManeuverPoints) {
         for (LegStep step : routeManeuverPoints) {
             // filtering required maneuver types
-            if (NavMapRoute.mapToManeuverType(step.maneuver().type()) != NavMapRoute.ManeuverType.TURN
-                    && NavMapRoute.mapToManeuverType(step.maneuver().type()) != NavMapRoute.ManeuverType.MERGE) {
+            NavMapRoute.ManeuverType maneuverType = NavMapRoute.mapToManeuverType(step.maneuver().type());
+            //Log.d(TAG, "maneuver -> " + step.maneuver().type());
+            if (!AppConfigs.MANEUVER_TYPES.contains(maneuverType)) {
                 continue;
             }
 
@@ -552,9 +565,19 @@ public class ArActivity extends AppCompatActivity {
             //maneuverMarker.setScalingMode(LocationMarker.ScalingMode.NO_SCALING);
             maneuverMarker.setScaleModifier(0.7f);
             maneuverMarker.setScalingMode(LocationMarker.ScalingMode.GRADUAL_FIXED_SIZE);
-            maneuverMarker.setOnlyRenderWhenWithin(150);
-            double bearFrom = step.maneuver().bearingBefore();
-            double bearTo = step.maneuver().bearingAfter();
+            //maneuverMarker.setOnlyRenderWhenWithin(150);
+            //double bearFrom = step.maneuver().bearingBefore();
+            double bearTo = 0;
+            if (step.geometry() != null) {
+                Point maneuverToPoint = PolylineUtils.decode(step.geometry(), Constants.PRECISION_6).get(1);
+                bearTo = (float) MapsUtils.calcBearing(
+                        maneuverMarker.latitude,
+                        maneuverMarker.longitude,
+                        maneuverToPoint.latitude(),
+                        maneuverToPoint.longitude());
+            } else {
+                bearTo = step.maneuver().bearingAfter();
+            }
             float bearing = (float) (((bearTo - calibratedBearing) + 360f) % 360); //calibBear==bearFrom
             float rotation = (float) Math.floor(360 - bearing);
             maneuverMarker.setRenderEvent(node -> {
@@ -569,7 +592,7 @@ public class ArActivity extends AppCompatActivity {
                 }
             });
             locationScene.attachLocationMarker(maneuverMarker);
-            Log.d(TAG, "maneuver marker is added");
+            Log.d(TAG, "maneuver marker is added -> " + step.maneuver().type());
         }
     }
 
@@ -712,6 +735,9 @@ public class ArActivity extends AppCompatActivity {
 
         try {
             arSceneView.resume();
+            if (arSurfaceView != null) {
+                arSurfaceView.onResume();
+            }
         } catch (CameraNotAvailableException ex) {
             displayError(this, "Unable to get camera", ex);
             DisplayMessagesUtils.showToastMsg(this, "Unable to get ARCore camera");
@@ -752,6 +778,9 @@ public class ArActivity extends AppCompatActivity {
         }
 
         arSceneView.pause();
+        if (arSurfaceView != null) {
+            arSurfaceView.onPause();
+        }
     }
 
     @Override

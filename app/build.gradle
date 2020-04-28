@@ -1,10 +1,16 @@
 apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android-extensions'
+apply plugin: 'kotlin-android'
 apply plugin: 'com.google.ar.sceneform.plugin'
 
 sceneform.asset('sampledata/models/RLab-arrow.obj',
         'default',
-        'src/main/assets/models/RLab-arrow.sfa',
-        'src/main/assets/models/RLab-arrow')
+        'src/main/assets/3dmodels/RLab-arrow.sfa',
+        'src/main/assets/3dmodels/RLab-arrow')
+sceneform.asset('sampledata/models/lane.obj',
+        'default',
+        'src/main/assets/3dmodels/lane.sfa',
+        'src/main/assets/3dmodels/lane')
 
 android {
     compileSdkVersion 28
@@ -117,6 +123,18 @@ dependencies {
     implementation 'org.tensorflow:tensorflow-lite-gpu:0.0.0-nightly'
     implementation 'org.tensorflow:tensorflow-lite-support:0.0.0-nightly'
 
+    // kotlin supporting
+    implementation "androidx.core:core-ktx:+"
+    implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:2.0.0"
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
+
+    // Obj - a simple Wavefront OBJ file loader
+    // https://github.com/javagl/Obj
+    implementation 'de.javagl:obj:0.3.0'
+
     //implementation project(path: ':madlocationmanager')
     //implementation 'com.github.maddevsio:mad-location-manager:0.1.13'
+}
+repositories {
+    mavenCentral()
 }
